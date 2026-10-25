@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+local-data/
+data/
+build/
+dist/
+*.log
+test-output/
+/preview.png
+*.sqlite3-wal
+*.sqlite3-shm
+.env
+.env.*
+!.env.example

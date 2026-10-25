@@ -1,0 +1,20 @@
+{
+  "project": "AnimCJK",
+  "revision": "3e1253b341cc7be14c3540bb3c045e6163557777",
+  "url": "https://github.com/parsimonhi/animCJK",
+  "sha256": {
+    "graphicsJa.txt": "00c4fc7a20cf6b615b9b67d9bc310e38945948e45d77a4b447f2e3255eef381d",
+    "dictionaryJa.txt": "890fbde118c448c16da08d39cfb40284ea3f2b0f8bebb9c6fc340274125014dc",
+    "graphicsZhHans.txt": "0018c3604846ceddebab2275386f31da57c16b045d164f6b803318cf211b952c",
+    "dictionaryZhHans.txt": "f698a1bc2477ecc2ebdff054e8f0d40343fc4b7f0092f2a3e9b137b5438ef299",
+    "graphicsZhHant.txt": "678ef6bcf28bef54275eeb961c65a86e84c25be2d6a04d05d4fe3da7b0632e70",
+    "dictionaryZhHant.txt": "69c26e355858a834c6068ffe619299572fac88b6ee469b778b466b612b9abc69"
+  },
+  "glyphs": {
+    "ja": 7336,
+    "hans": 8244,
+    "hant": 1513
+  },
+  "modified": "2026-10-22T19:17:53.848659+00:00",
+  "changes": "Regional records compressed into SQLite; components indexed from decomposition; original files retained."
+}

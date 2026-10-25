@@ -1,0 +1,1073 @@
+{
+  "concepts": [
+    {
+      "id": "younger-brother",
+      "en": "younger brother",
+      "jp": [
+        "弟",
+        "おとうと"
+      ],
+      "cn": [
+        "弟弟",
+        "di4 di5",
+        "弟"
+      ]
+    },
+    {
+      "id": "ladder",
+      "en": "ladder",
+      "jp": [
+        "梯子",
+        "はしご",
+        "梯",
+        "はしご"
+      ],
+      "cn": [
+        "梯子",
+        "ti1 zi5",
+        "梯"
+      ]
+    },
+    {
+      "id": "school",
+      "en": "school",
+      "jp": [
+        "学校",
+        "がっこう"
+      ],
+      "cn": [
+        "学校",
+        "xue2 xiao4",
+        "學校"
+      ]
+    },
+    {
+      "id": "student",
+      "en": "student",
+      "jp": [
+        "学生",
+        "がくせい"
+      ],
+      "cn": [
+        "学生",
+        "xue2 sheng5",
+        "學生"
+      ]
+    },
+    {
+      "id": "university",
+      "en": "university",
+      "jp": [
+        "大学",
+        "だいがく"
+      ],
+      "cn": [
+        "大学",
+        "da4 xue2",
+        "大學"
+      ]
+    },
+    {
+      "id": "teacher",
+      "en": "teacher",
+      "jp": [
+        "先生",
+        "せんせい"
+      ],
+      "cn": [
+        "老师",
+        "lao3 shi1",
+        "老師"
+      ]
+    },
+    {
+      "id": "water",
+      "en": "water",
+      "jp": [
+        "水",
+        "みず"
+      ],
+      "cn": [
+        "水",
+        "shui3"
+      ]
+    },
+    {
+      "id": "fire",
+      "en": "fire",
+      "jp": [
+        "火",
+        "ひ"
+      ],
+      "cn": [
+        "火",
+        "huo3"
+      ]
+    },
+    {
+      "id": "tree",
+      "en": "tree",
+      "jp": [
+        "木",
+        "き"
+      ],
+      "cn": [
+        "树",
+        "shu4",
+        "樹"
+      ]
+    },
+    {
+      "id": "forest",
+      "en": "forest",
+      "jp": [
+        "森",
+        "もり"
+      ],
+      "cn": [
+        "森林",
+        "sen1 lin2"
+      ]
+    },
+    {
+      "id": "mountain",
+      "en": "mountain",
+      "jp": [
+        "山",
+        "やま"
+      ],
+      "cn": [
+        "山",
+        "shan1"
+      ]
+    },
+    {
+      "id": "river",
+      "en": "river",
+      "jp": [
+        "川",
+        "かわ"
+      ],
+      "cn": [
+        "河",
+        "he2"
+      ]
+    },
+    {
+      "id": "sea",
+      "en": "sea",
+      "jp": [
+        "海",
+        "うみ"
+      ],
+      "cn": [
+        "海",
+        "hai3"
+      ]
+    },
+    {
+      "id": "sun",
+      "en": "sun",
+      "jp": [
+        "太陽",
+        "たいよう"
+      ],
+      "cn": [
+        "太阳",
+        "tai4 yang2",
+        "太陽"
+      ]
+    },
+    {
+      "id": "moon",
+      "en": "moon",
+      "jp": [
+        "月",
+        "つき"
+      ],
+      "cn": [
+        "月亮",
+        "yue4 liang5"
+      ]
+    },
+    {
+      "id": "person",
+      "en": "person",
+      "jp": [
+        "人",
+        "ひと"
+      ],
+      "cn": [
+        "人",
+        "ren2"
+      ]
+    },
+    {
+      "id": "friend",
+      "en": "friend",
+      "jp": [
+        "友達",
+        "ともだち"
+      ],
+      "cn": [
+        "朋友",
+        "peng2 you5"
+      ]
+    },
+    {
+      "id": "family",
+      "en": "family",
+      "jp": [
+        "家族",
+        "かぞく"
+      ],
+      "cn": [
+        "家人",
+        "jia1 ren2"
+      ]
+    },
+    {
+      "id": "father",
+      "en": "father",
+      "jp": [
+        "父",
+        "ちち"
+      ],
+      "cn": [
+        "父亲",
+        "fu4 qin1",
+        "父親"
+      ]
+    },
+    {
+      "id": "mother",
+      "en": "mother",
+      "jp": [
+        "母",
+        "はは"
+      ],
+      "cn": [
+        "母亲",
+        "mu3 qin1",
+        "母親"
+      ]
+    },
+    {
+      "id": "older-brother",
+      "en": "older brother",
+      "jp": [
+        "兄",
+        "あに"
+      ],
+      "cn": [
+        "哥哥",
+        "ge1 ge5"
+      ]
+    },
+    {
+      "id": "older-sister",
+      "en": "older sister",
+      "jp": [
+        "姉",
+        "あね"
+      ],
+      "cn": [
+        "姐姐",
+        "jie3 jie5"
+      ]
+    },
+    {
+      "id": "younger-sister",
+      "en": "younger sister",
+      "jp": [
+        "妹",
+        "いもうと"
+      ],
+      "cn": [
+        "妹妹",
+        "mei4 mei5"
+      ]
+    },
+    {
+      "id": "book",
+      "en": "book",
+      "jp": [
+        "本",
+        "ほん"
+      ],
+      "cn": [
+        "书",
+        "shu1",
+        "書"
+      ]
+    },
+    {
+      "id": "language",
+      "en": "language",
+      "jp": [
+        "言語",
+        "げんご"
+      ],
+      "cn": [
+        "语言",
+        "yu3 yan2",
+        "語言"
+      ]
+    },
+    {
+      "id": "japanese",
+      "en": "Japanese language",
+      "jp": [
+        "日本語",
+        "にほんご"
+      ],
+      "cn": [
+        "日语",
+        "ri4 yu3",
+        "日語"
+      ]
+    },
+    {
+      "id": "chinese",
+      "en": "Chinese language",
+      "jp": [
+        "中国語",
+        "ちゅうごくご"
+      ],
+      "cn": [
+        "中文",
+        "Zhong1 wen2",
+        "汉语",
+        "漢語"
+      ]
+    },
+    {
+      "id": "english",
+      "en": "English language",
+      "jp": [
+        "英語",
+        "えいご"
+      ],
+      "cn": [
+        "英语",
+        "Ying1 yu3",
+        "英語"
+      ]
+    },
+    {
+      "id": "character",
+      "en": "Chinese character",
+      "jp": [
+        "漢字",
+        "かんじ"
+      ],
+      "cn": [
+        "汉字",
+        "han4 zi4",
+        "漢字"
+      ]
+    },
+    {
+      "id": "dictionary",
+      "en": "dictionary",
+      "jp": [
+        "辞書",
+        "じしょ"
+      ],
+      "cn": [
+        "词典",
+        "ci2 dian3",
+        "詞典",
+        "辞典",
+        "辭典"
+      ]
+    },
+    {
+      "id": "radical",
+      "en": "radical",
+      "jp": [
+        "部首",
+        "ぶしゅ"
+      ],
+      "cn": [
+        "部首",
+        "bu4 shou3"
+      ],
+      "note": "Dictionary indexing radical of a Chinese character."
+    },
+    {
+      "id": "cat",
+      "en": "cat",
+      "jp": [
+        "猫",
+        "ねこ"
+      ],
+      "cn": [
+        "猫",
+        "mao1",
+        "貓"
+      ]
+    },
+    {
+      "id": "dog",
+      "en": "dog",
+      "jp": [
+        "犬",
+        "いぬ"
+      ],
+      "cn": [
+        "狗",
+        "gou3"
+      ]
+    },
+    {
+      "id": "bird",
+      "en": "bird",
+      "jp": [
+        "鳥",
+        "とり"
+      ],
+      "cn": [
+        "鸟",
+        "niao3",
+        "鳥"
+      ]
+    },
+    {
+      "id": "fish",
+      "en": "fish",
+      "jp": [
+        "魚",
+        "さかな"
+      ],
+      "cn": [
+        "鱼",
+        "yu2",
+        "魚"
+      ]
+    },
+    {
+      "id": "train",
+      "en": "train",
+      "jp": [
+        "列車",
+        "れっしゃ"
+      ],
+      "cn": [
+        "火车",
+        "huo3 che1",
+        "火車"
+      ]
+    },
+    {
+      "id": "car",
+      "en": "car",
+      "jp": [
+        "自動車",
+        "じどうしゃ"
+      ],
+      "cn": [
+        "汽车",
+        "qi4 che1",
+        "汽車"
+      ]
+    },
+    {
+      "id": "bicycle",
+      "en": "bicycle",
+      "jp": [
+        "自転車",
+        "じてんしゃ"
+      ],
+      "cn": [
+        "自行车",
+        "zi4 xing2 che1",
+        "自行車"
+      ]
+    },
+    {
+      "id": "telephone",
+      "en": "telephone",
+      "jp": [
+        "電話",
+        "でんわ"
+      ],
+      "cn": [
+        "电话",
+        "dian4 hua4",
+        "電話"
+      ]
+    },
+    {
+      "id": "computer",
+      "en": "computer",
+      "jp": [
+        "コンピューター",
+        "コンピューター"
+      ],
+      "cn": [
+        "电脑",
+        "dian4 nao3",
+        "電腦"
+      ]
+    },
+    {
+      "id": "today",
+      "en": "today",
+      "jp": [
+        "今日",
+        "きょう"
+      ],
+      "cn": [
+        "今天",
+        "jin1 tian1"
+      ]
+    },
+    {
+      "id": "tomorrow",
+      "en": "tomorrow",
+      "jp": [
+        "明日",
+        "あした"
+      ],
+      "cn": [
+        "明天",
+        "ming2 tian1"
+      ]
+    },
+    {
+      "id": "yesterday",
+      "en": "yesterday",
+      "jp": [
+        "昨日",
+        "きのう"
+      ],
+      "cn": [
+        "昨天",
+        "zuo2 tian1"
+      ]
+    },
+    {
+      "id": "time",
+      "en": "time",
+      "jp": [
+        "時間",
+        "じかん"
+      ],
+      "cn": [
+        "时间",
+        "shi2 jian1",
+        "時間"
+      ]
+    },
+    {
+      "id": "love",
+      "en": "love",
+      "jp": [
+        "愛",
+        "あい"
+      ],
+      "cn": [
+        "爱",
+        "ai4",
+        "愛"
+      ]
+    },
+    {
+      "id": "peace",
+      "en": "peace",
+      "jp": [
+        "平和",
+        "へいわ"
+      ],
+      "cn": [
+        "和平",
+        "he2 ping2"
+      ]
+    },
+    {
+      "id": "music",
+      "en": "music",
+      "jp": [
+        "音楽",
+        "おんがく"
+      ],
+      "cn": [
+        "音乐",
+        "yin1 yue4",
+        "音樂"
+      ]
+    },
+    {
+      "id": "eat",
+      "en": "to eat",
+      "jp": [
+        "食べる",
+        "たべる"
+      ],
+      "cn": [
+        "吃",
+        "chi1"
+      ]
+    },
+    {
+      "id": "drink",
+      "en": "to drink",
+      "jp": [
+        "飲む",
+        "のむ"
+      ],
+      "cn": [
+        "喝",
+        "he1"
+      ]
+    },
+    {
+      "id": "read",
+      "en": "to read",
+      "jp": [
+        "読む",
+        "よむ"
+      ],
+      "cn": [
+        "读",
+        "du2",
+        "讀"
+      ]
+    },
+    {
+      "id": "write",
+      "en": "to write",
+      "jp": [
+        "書く",
+        "かく"
+      ],
+      "cn": [
+        "写",
+        "xie3",
+        "寫"
+      ]
+    },
+    {
+      "id": "learn",
+      "en": "to learn",
+      "jp": [
+        "学ぶ",
+        "まなぶ"
+      ],
+      "cn": [
+        "学习",
+        "xue2 xi2",
+        "學習"
+      ]
+    },
+    {
+      "id": "big",
+      "en": "big",
+      "jp": [
+        "大きい",
+        "おおきい"
+      ],
+      "cn": [
+        "大",
+        "da4"
+      ]
+    },
+    {
+      "id": "small",
+      "en": "small",
+      "jp": [
+        "小さい",
+        "ちいさい"
+      ],
+      "cn": [
+        "小",
+        "xiao3"
+      ]
+    },
+    {
+      "id": "thank-you",
+      "en": "thank you",
+      "jp": [
+        "ありがとう",
+        "ありがとう"
+      ],
+      "cn": [
+        "谢谢",
+        "xie4 xie5",
+        "謝謝"
+      ]
+    },
+    {
+      "id": "hello",
+      "en": "hello",
+      "jp": [
+        "こんにちは",
+        "こんにちは"
+      ],
+      "cn": [
+        "你好",
+        "ni3 hao3"
+      ]
+    }
+  ],
+  "characters": {
+    "弟": {
+      "unihan": {
+        "kDefinition": "younger brother",
+        "kMandarin": "dì",
+        "kRSUnicode": "57.4",
+        "kTotalStrokes": "7"
+      },
+      "kanjidic": {
+        "on": [
+          "テイ",
+          "ダイ",
+          "デ"
+        ],
+        "kun": [
+          "おとうと"
+        ],
+        "meanings": [
+          "younger brother"
+        ],
+        "radicals": [
+          "57"
+        ],
+        "strokes": [
+          "7"
+        ]
+      }
+    },
+    "梯": {
+      "ids": "⿰木弟",
+      "unihan": {
+        "kDefinition": "ladder; steps",
+        "kMandarin": "tī",
+        "kRSUnicode": "75.7",
+        "kTotalStrokes": "11"
+      },
+      "kanjidic": {
+        "on": [
+          "テイ",
+          "タイ"
+        ],
+        "kun": [
+          "はしご"
+        ],
+        "meanings": [
+          "ladder"
+        ],
+        "radicals": [
+          "75"
+        ],
+        "strokes": [
+          "11"
+        ]
+      }
+    },
+    "木": {
+      "unihan": {
+        "kDefinition": "tree; wood",
+        "kMandarin": "mù",
+        "kRSUnicode": "75.0",
+        "kTotalStrokes": "4"
+      },
+      "kanjidic": {
+        "on": [
+          "モク",
+          "ボク"
+        ],
+        "kun": [
+          "き",
+          "こ-"
+        ],
+        "meanings": [
+          "tree",
+          "wood"
+        ],
+        "radicals": [
+          "75"
+        ],
+        "strokes": [
+          "4"
+        ]
+      }
+    },
+    "林": {
+      "ids": "⿰木木",
+      "unihan": {
+        "kDefinition": "woods; grove",
+        "kMandarin": "lín",
+        "kRSUnicode": "75.4",
+        "kTotalStrokes": "8"
+      }
+    },
+    "森": {
+      "ids": "⿱木林",
+      "unihan": {
+        "kDefinition": "forest",
+        "kMandarin": "sēn",
+        "kRSUnicode": "75.8",
+        "kTotalStrokes": "12"
+      }
+    },
+    "学": {
+      "ids": "⿱⿱⺍冖子",
+      "unihan": {
+        "kDefinition": "learn; study",
+        "kMandarin": "xué",
+        "kRSUnicode": "39.5",
+        "kTotalStrokes": "8"
+      },
+      "kanjidic": {
+        "on": [
+          "ガク"
+        ],
+        "kun": [
+          "まな.ぶ"
+        ],
+        "meanings": [
+          "study",
+          "learning"
+        ],
+        "radicals": [
+          "39"
+        ],
+        "strokes": [
+          "8"
+        ],
+        "grade": "1"
+      }
+    },
+    "校": {
+      "ids": "⿰木交",
+      "unihan": {
+        "kDefinition": "school; compare",
+        "kMandarin": "xiào",
+        "kRSUnicode": "75.6",
+        "kTotalStrokes": "10"
+      },
+      "kanjidic": {
+        "on": [
+          "コウ"
+        ],
+        "kun": [],
+        "meanings": [
+          "school"
+        ],
+        "radicals": [
+          "75"
+        ],
+        "strokes": [
+          "10"
+        ],
+        "grade": "1"
+      }
+    },
+    "子": {
+      "unihan": {
+        "kDefinition": "child; son",
+        "kMandarin": "zǐ",
+        "kRSUnicode": "39.0",
+        "kTotalStrokes": "3"
+      }
+    },
+    "日": {
+      "unihan": {
+        "kDefinition": "sun; day",
+        "kMandarin": "rì",
+        "kRSUnicode": "72.0",
+        "kTotalStrokes": "4"
+      }
+    },
+    "月": {
+      "unihan": {
+        "kDefinition": "moon; month",
+        "kMandarin": "yuè",
+        "kRSUnicode": "74.0",
+        "kTotalStrokes": "4"
+      }
+    },
+    "明": {
+      "ids": "⿰日月",
+      "unihan": {
+        "kDefinition": "bright; clear",
+        "kMandarin": "míng",
+        "kRSUnicode": "72.4",
+        "kTotalStrokes": "8"
+      }
+    },
+    "水": {
+      "unihan": {
+        "kDefinition": "water",
+        "kMandarin": "shuǐ",
+        "kRSUnicode": "85.0",
+        "kTotalStrokes": "4"
+      }
+    },
+    "火": {
+      "unihan": {
+        "kDefinition": "fire",
+        "kMandarin": "huǒ",
+        "kRSUnicode": "86.0",
+        "kTotalStrokes": "4"
+      }
+    },
+    "人": {
+      "unihan": {
+        "kDefinition": "person; human",
+        "kMandarin": "rén",
+        "kRSUnicode": "9.0",
+        "kTotalStrokes": "2"
+      }
+    },
+    "休": {
+      "ids": "⿰亻木",
+      "unihan": {
+        "kDefinition": "rest",
+        "kMandarin": "xiū",
+        "kRSUnicode": "9.4",
+        "kTotalStrokes": "6"
+      }
+    },
+    "好": {
+      "ids": "⿰女子",
+      "unihan": {
+        "kDefinition": "good; to like",
+        "kMandarin": "hǎo",
+        "kRSUnicode": "38.3",
+        "kTotalStrokes": "6"
+      }
+    },
+    "女": {
+      "unihan": {
+        "kDefinition": "woman; female",
+        "kMandarin": "nǚ",
+        "kRSUnicode": "38.0",
+        "kTotalStrokes": "3"
+      }
+    },
+    "妹": {
+      "ids": "⿰女未",
+      "unihan": {
+        "kDefinition": "younger sister",
+        "kMandarin": "mèi",
+        "kRSUnicode": "38.5",
+        "kTotalStrokes": "8"
+      }
+    },
+    "語": {
+      "ids": "⿰言吾",
+      "unihan": {
+        "kDefinition": "language; speech",
+        "kMandarin": "yǔ",
+        "kRSUnicode": "149.7",
+        "kTotalStrokes": "14"
+      }
+    },
+    "语": {
+      "ids": "⿰讠吾",
+      "unihan": {
+        "kDefinition": "language; speech",
+        "kMandarin": "yǔ",
+        "kRSUnicode": "149'.7",
+        "kTotalStrokes": "9",
+        "kTraditionalVariant": "U+8A9E"
+      }
+    },
+    "言": {
+      "unihan": {
+        "kDefinition": "words; speech",
+        "kMandarin": "yán",
+        "kRSUnicode": "149.0",
+        "kTotalStrokes": "7"
+      }
+    },
+    "本": {
+      "unihan": {
+        "kDefinition": "root; origin; book",
+        "kMandarin": "běn",
+        "kRSUnicode": "75.1",
+        "kTotalStrokes": "5"
+      }
+    },
+    "大": {
+      "unihan": {
+        "kDefinition": "large; big",
+        "kMandarin": "dà",
+        "kRSUnicode": "37.0",
+        "kTotalStrokes": "3"
+      }
+    },
+    "小": {
+      "unihan": {
+        "kDefinition": "small",
+        "kMandarin": "xiǎo",
+        "kRSUnicode": "42.0",
+        "kTotalStrokes": "3"
+      }
+    },
+    "山": {
+      "unihan": {
+        "kDefinition": "mountain",
+        "kMandarin": "shān",
+        "kRSUnicode": "46.0",
+        "kTotalStrokes": "3"
+      }
+    },
+    "猫": {
+      "ids": "⿰犭苗",
+      "unihan": {
+        "kDefinition": "cat",
+        "kMandarin": "māo",
+        "kRSUnicode": "94.8",
+        "kTotalStrokes": "11"
+      }
+    },
+    "苗": {
+      "ids": "⿱艹田",
+      "unihan": {
+        "kDefinition": "seedling",
+        "kMandarin": "miáo",
+        "kRSUnicode": "140.5",
+        "kTotalStrokes": "8"
+      }
+    },
+    "田": {
+      "unihan": {
+        "kDefinition": "field",
+        "kMandarin": "tián",
+        "kRSUnicode": "102.0",
+        "kTotalStrokes": "5"
+      }
+    },
+    "悌": {
+      "ids": "⿰忄弟",
+      "unihan": {
+        "kDefinition": "respectful toward elder brothers",
+        "kMandarin": "tì",
+        "kRSUnicode": "61.7",
+        "kTotalStrokes": "10"
+      }
+    },
+    "涕": {
+      "ids": "⿰氵弟",
+      "unihan": {
+        "kDefinition": "tears; nasal mucus",
+        "kMandarin": "tì",
+        "kRSUnicode": "85.7",
+        "kTotalStrokes": "10"
+      }
+    },
+    "第": {
+      "ids": "⿱竹𢎨",
+      "unihan": {
+        "kDefinition": "ordinal prefix",
+        "kMandarin": "dì",
+        "kRSUnicode": "118.5",
+        "kTotalStrokes": "11"
+      }
+    }
+  }
+}

@@ -184,11 +184,12 @@ class WindowTests(unittest.TestCase):
         QTest.mouseClick(self.window.word_view.viewport(),Qt.MouseButton.LeftButton,pos=target)
         self.app.processEvents()
         self.assertEqual(self.window.analysis_window.char,'校')
-        self.assertEqual(self.window.tabs.currentIndex(),0)
+        self.assertFalse(self.window.analysis_window.isWindow())
+        self.assertEqual(self.window.tabs.currentIndex(),2)
         self.window.handle_link(QUrl('char:%E5%BC%9F'))
         self.assertTrue(self.window.analysis_window.isVisible())
         self.assertEqual(self.window.analysis_window.char,'弟')
-        self.assertEqual(self.window.tabs.currentIndex(), 1)
+        self.assertEqual(self.window.tabs.currentIndex(), 2)
         self.assertIn('梯', self.window.char_view.toPlainText())
         self.assertIn('Part of', self.window.char_view.toPlainText())
 
@@ -236,7 +237,7 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(pad.candidates.count(), 0)
         pad.mode.setCurrentIndex(pad.mode.findData('hant'))
         self.assertEqual(self.window.db.preference('handwriting-mode'), 'hant')
-        self.assertIn('smaller', pad.coverage.text())
+        self.assertIn('smaller', pad.coverage.text().lower())
         pad.close()
         self.assertFalse(pad.timer.isActive())
         self.window.open_handwriting()
@@ -255,6 +256,81 @@ class WindowTests(unittest.TestCase):
         self.assertNotIn('water', self.window.result_label.text())
         self.window.show_history()
         self.assertGreaterEqual(self.window.results.count(), 3)
+
+    def test_tools_are_embedded_and_handwriting_toggle_preserves_drawing(self):
+        window = self.window
+        self.assertTrue(window.filter_dock.isVisible())
+        QTest.mouseClick(window.handwriting_button, Qt.MouseButton.LeftButton)
+        pad = window.handwriting_window
+        self.assertFalse(pad.isWindow())
+        self.assertIs(pad.window(), window)
+        self.assertFalse(window.filter_dock.isVisible())
+        pad.canvas.strokes = [[(.1,.2),(.8,.2)]]
+        pad.canvas.changed.emit()
+        QTest.mouseClick(window.handwriting_button, Qt.MouseButton.LeftButton)
+        self.assertFalse(pad.isVisible())
+        self.assertFalse(pad.timer.isActive())
+        self.assertTrue(window.filter_dock.isVisible())
+        window.open_handwriting()
+        self.assertIs(window.handwriting_window, pad)
+        self.assertEqual(len(pad.canvas.strokes), 1)
+        window.open_character_analysis('弟','ja')
+        panel = window.analysis_window
+        self.assertFalse(panel.isWindow())
+        self.assertIs(panel.window(), window)
+        self.assertEqual(window.tabs.currentIndex(), 2)
+        self.assertEqual(panel.details.count(), 3)
+        panel.details.setCurrentIndex(2)
+        self.assertTrue(panel.words.isVisible())
+        panel.details.setCurrentIndex(0)
+        panel.canvas.play()
+        window.tabs.setCurrentIndex(0)
+        self.assertFalse(panel.canvas.timer.isActive())
+
+    def test_analysis_popout_returns_same_panel_and_preserves_state(self):
+        window = self.window
+        window.open_character_analysis('骨','hant')
+        panel = window.analysis_window
+        panel.canvas.set_position(2.5)
+        panel.details.setCurrentIndex(1)
+        panel.nested.setChecked(True)
+        expected = panel.snapshot()
+        QTest.mouseClick(panel.popout_button, Qt.MouseButton.LeftButton)
+        self.assertTrue(window.analysis_popup.isVisible())
+        self.assertIs(panel.parentWidget(), window.analysis_popup)
+        self.assertEqual(panel.snapshot(), expected)
+        window.show_entry('fixture:school:jp')
+        self.assertTrue(panel.isVisible())
+        window.analysis_popup.close()
+        self.app.processEvents()
+        self.assertIs(panel.parentWidget(), window.analysis_page)
+        self.assertEqual(window.tabs.currentIndex(), 2)
+        self.assertEqual(panel.snapshot(), expected)
+        self.assertFalse(window.analysis_popup.isVisible())
+        self.assertFalse(panel.isWindow())
+
+    def test_analysis_navigation_restores_character_region_and_section(self):
+        window = self.window
+        window.open_character_analysis('骨','ja')
+        panel = window.analysis_window
+        panel.details.setCurrentIndex(1)
+        panel.canvas.set_position(2.5)
+        panel.handle_link(QUrl('char:弟'))
+        panel.modes.setCurrentIndex(1)
+        self.assertEqual((panel.char,panel.mode), ('弟','hant'))
+        window.go_back()
+        self.app.processEvents()
+        self.assertEqual((panel.char,panel.mode), ('弟','ja'))
+        window.go_back()
+        self.app.processEvents()
+        self.assertEqual((panel.char,panel.mode), ('骨','ja'))
+        self.assertEqual(panel.details.currentIndex(), 1)
+        self.assertEqual(panel.canvas.position, 2.5)
+        self.assertEqual(window.current_char, '骨')
+        window.go_forward()
+        self.app.processEvents()
+        self.assertEqual(panel.char, '弟')
+        self.assertEqual(window.tabs.currentIndex(), 2)
 
     def test_empty_search_and_language_filter(self):
         self.window.language.setCurrentIndex(1)
@@ -290,6 +366,7 @@ class WindowTests(unittest.TestCase):
         self.wait_search()
         stale = window.generation
         old_results = window.db.search('将')
+        window.open_character_analysis('将','ja')
         window.show_character('裴')
         self.assertEqual(window.search_input.text(), '将')
         window.show_history()
@@ -305,6 +382,9 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(window.current_char, '裴')
         self.assertEqual(window.results.currentItem().data(Qt.ItemDataRole.UserRole), ('entry', 'fixture:pei:source'))
         self.assertEqual(window.db.history_entry('将'), 'fixture:pei:jiang')
+        window.tabs.setCurrentIndex(2)
+        self.app.processEvents()
+        self.assertEqual(window.analysis_window.root_char, '裴')
 
     def test_recent_character_without_entry_shows_that_character(self):
         window = self.window
@@ -501,7 +581,7 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(window.tabs.currentIndex(), 0)
         window.go_back()
         self.app.processEvents()
-        self.assertEqual(window.tabs.currentIndex(), 1)
+        self.assertEqual(window.tabs.currentIndex(), 2)
         self.assertEqual(window.current_char, '梯')
         window.go_back()
         self.app.processEvents()

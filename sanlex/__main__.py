@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--refresh", action="store_true", help="Fetch fresh source files")
     parser.add_argument('--character',help='Open the character analysis window for one kanji / hanzi')
     parser.add_argument('--character-mode',choices=('ja','hans','hant'),help='Character analysis region')
+    parser.add_argument('--handwriting',action='store_true',help='Open the handwriting panel in the main window')
     parser.add_argument("--screenshot", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.character:
@@ -56,10 +57,12 @@ def main():
     window.show()
     if args.character:
         window.open_character_analysis(args.character,args.character_mode)
+    if args.handwriting:
+        window.open_handwriting()
     if args.screenshot:
         def capture():
-            target = window.analysis_window if args.character else window
-            target.grab().save(str(args.screenshot))
+            window.grab().save(str(args.screenshot))
+            window.close()
             app.quit()
         QTimer.singleShot(1600, capture)
     sys.exit(app.exec())

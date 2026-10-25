@@ -190,25 +190,45 @@ class RecognitionWorker(QThread):
 class HandwritingWindow(QDialog):
     lookup_requested = Signal(str, str)
     insert_requested = Signal(str)
+    close_requested = Signal()
 
-    def __init__(self, db, parent=None):
+    def __init__(self, db, parent=None, *, embedded=False):
         super().__init__(parent)
+        self.embedded = embedded
+        if embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle('Handwriting lookup · SanLex')
         self.setModal(False)
         self.resize(760, 600)
-        self.setMinimumSize(660, 530)
+        self.setMinimumSize(310, 280) if embedded else self.setMinimumSize(660, 530)
         self.db = db
         self.generation = 0
         self.counts = None
         self.error = None
         layout = QVBoxLayout(self)
+        if embedded:
+            layout.setContentsMargins(6,6,6,6)
+            layout.setSpacing(5)
+            self.setStyleSheet('QPushButton {padding:5px 7px;} QComboBox {padding:5px 7px;} '
+                               'QLabel {font-size:12px;}')
         title = QLabel('Write the character you want to look up')
-        title.setStyleSheet('font-size:20px;font-weight:600;color:#214b40;')
-        layout.addWidget(title)
+        title.setStyleSheet(f'font-size:{15 if embedded else 20}px;font-weight:600;color:#214b40;')
+        if embedded:
+            title.setText('Handwriting')
+            heading = QHBoxLayout()
+            heading.addWidget(title,1)
+            hide = QPushButton('Hide ×')
+            hide.setAccessibleName('Hide handwriting panel')
+            hide.clicked.connect(self.close_requested)
+            heading.addWidget(hide)
+            layout.addLayout(heading)
+        else:
+            layout.addWidget(title)
         intro = QLabel('One kanji / hanzi at a time. Lift between strokes; usual stroke order works best.\n'
                        'Recognition stays on this device. Matches are suggestions; cursive writing may be missed.')
         intro.setWordWrap(True)
-        layout.addWidget(intro)
+        if not embedded:
+            layout.addWidget(intro)
         self.mode = QComboBox()
         self.mode.addItem('All scripts', 'all')
         for key, (name, _) in MODES.items():
@@ -223,6 +243,8 @@ class HandwritingWindow(QDialog):
         body = QHBoxLayout()
         left = QVBoxLayout()
         self.canvas = HandwritingCanvas()
+        if embedded:
+            self.canvas.setMinimumSize(140,140)
         left.addWidget(self.canvas, 1)
         controls = QHBoxLayout()
         self.undo_button = QPushButton('Undo stroke')
@@ -243,18 +265,20 @@ class HandwritingWindow(QDialog):
         self.candidates.setResizeMode(QListView.ResizeMode.Adjust)
         self.candidates.setMovement(QListView.Movement.Static)
         self.candidates.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.candidates.setGridSize(QSize(68, 65))
+        self.candidates.setGridSize(QSize(48,48) if embedded else QSize(68,65))
         self.candidates.setFont(QFont('Microsoft YaHei', 25))
         self.candidates.setStyleSheet("QListWidget {background:#fffef9;font-size:32px;font-family:'Microsoft YaHei';} "
                                      'QListWidget::item {padding:3px;margin:1px;}')
-        self.candidates.setMinimumWidth(240)
+        self.candidates.setMinimumWidth(108 if embedded else 240)
+        if embedded:
+            self.candidates.setMinimumHeight(48)
         self.candidates.currentItemChanged.connect(self.selection_changed)
         self.candidates.itemActivated.connect(lambda *_: self.lookup())
         right.addWidget(self.candidates, 1)
-        self.lookup_button = QPushButton('Look up character')
+        self.lookup_button = QPushButton('Look up' if embedded else 'Look up character')
         self.lookup_button.setObjectName('primary')
         self.lookup_button.clicked.connect(self.lookup)
-        self.insert_button = QPushButton('Insert into search')
+        self.insert_button = QPushButton('Insert' if embedded else 'Insert into search')
         self.insert_button.setToolTip('Insert at the search cursor, replacing any selected text. Write more characters to build a word.')
         self.insert_button.clicked.connect(self.insert)
         right.addWidget(self.lookup_button)
@@ -263,7 +287,10 @@ class HandwritingWindow(QDialog):
         layout.addLayout(body, 1)
         hint = QLabel('Select a match, then look it up or insert it at the search cursor. Double-click a match to look it up.')
         hint.setWordWrap(True)
-        layout.addWidget(hint)
+        if not embedded:
+            layout.addWidget(hint)
+        else:
+            title.setToolTip(intro.text() + '\n' + hint.text())
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(320)
@@ -293,7 +320,9 @@ class HandwritingWindow(QDialog):
             return
         mode = self.mode.currentData()
         detail = 'Traditional Chinese has a smaller template set. Try All scripts if a match is missing.' if mode == 'hant' else 'Coverage is limited to the bundled stroke pack.'
-        self.coverage.setText(f'{self.counts[mode]:,} characters · Offline shape matching. {detail}')
+        self.coverage.setText(f'{self.counts[mode]:,} characters · Offline' + (' · Smaller set' if mode=='hant' else '')
+                              if self.embedded else f'{self.counts[mode]:,} characters · Offline shape matching. {detail}')
+        self.coverage.setToolTip(detail)
 
     def changed(self):
         self.generation += 1
@@ -371,3 +400,14 @@ class HandwritingWindow(QDialog):
         self.timer.stop()
         self.hide()
         self.worker.shutdown()
+
+    def closeEvent(self, event):
+        if self.embedded:
+            self.close_requested.emit()
+        super().closeEvent(event)
+
+    def reject(self):
+        if self.embedded:
+            self.close_requested.emit()
+        else:
+            super().reject()

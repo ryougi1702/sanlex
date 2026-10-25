@@ -72,16 +72,25 @@ with tempfile.TemporaryDirectory() as directory, patch('urllib.request.urlopen',
     assert '木' in matches[:5], matches
     pad.candidates.setCurrentRow(matches.index('木'))
     pad.grab().save(str(output / 'handwriting.png'))
-    pad.resize(660, 530)
-    app.processEvents()
-    pad.grab().save(str(output / 'handwriting-minimum.png'))
     pad.lookup()
     assert window.analysis_window.root_char == '木'
     wait_until(lambda: not window.workers)
+    app.processEvents()
+    assert not pad.isWindow()
+    assert not window.analysis_window.isWindow()
+    window.grab().save(str(output / 'workspace-analysis.png'))
+    window.resize(1020,690)
+    app.processEvents()
+    window.grab().save(str(output / 'workspace-minimum.png'))
+    window.toggle_analysis_popout()
+    app.processEvents()
+    window.analysis_popup.grab().save(str(output / 'analysis-popout.png'))
+    window.analysis_popup.close()
+    assert window.analysis_window.parentWidget() is window.analysis_page
     report = {'offline': True, 'template_load_seconds': round(loaded, 3),
               'recognition_seconds_including_debounce': round(recognition, 3),
               'coverage': pad.counts, 'candidates': matches, 'lookup': window.analysis_window.root_char,
-              'minimum_size': [pad.width(), pad.height()]}
+              'minimum_size': [window.width(), window.height()]}
     window.close()
     assert not pad.worker.isRunning()
     app.processEvents()

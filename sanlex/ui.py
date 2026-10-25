@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
 from .db import Dictionary, resource_path
 from .filters import FilterPanel
 from .fonts import REGIONAL_FONT_CSS, entry_font, font_style, language_html
-from .analysis_window import AnalysisWindow
+from .analysis_window import AnalysisPopup, AnalysisWindow
 from .examples import corpus_examples, dictionary_examples
 from .autocomplete import Autocomplete
 from .handwriting_window import HandwritingWindow
@@ -414,7 +414,12 @@ class MainWindow(QMainWindow):
         self.workers = []
         self.data_dialog = None
         self.analysis_window = None
+        self.analysis_popup = None
         self.handwriting_window = None
+        self._tool_filters_restore = False
+        self._tool_space_active = False
+        self._closing = False
+        self._opening_analysis = False
         self.mode = "dictionary"
         self._navigation_history = []
         self._navigation_index = -1
@@ -492,15 +497,17 @@ class MainWindow(QMainWindow):
         row.addWidget(self.filter_toggle)
         row.addWidget(button("Search", self.search_now, "primary"))
         layout.addLayout(row)
-        examples = QHBoxLayout()
+        self.examples_widget = QWidget()
+        examples = QHBoxLayout(self.examples_widget)
+        examples.setContentsMargins(0,0,0,0)
         examples.addWidget(label("EXPLORE", "muted"))
         for query in ("学校", "younger brother", "梯", "木", "dictionary"):
             examples.addWidget(button(query, lambda checked=False, q=query: self.set_query(q), "example"))
         examples.addStretch()
-        self.handwriting_button = button('✎  Handwriting', self.open_handwriting)
+        self.handwriting_button = button('✎  Handwriting', self.toggle_handwriting)
+        self.handwriting_button.setCheckable(True)
         self.handwriting_button.setToolTip('Draw an unfamiliar character to look it up (Ctrl+H)')
-        examples.addWidget(self.handwriting_button)
-        layout.addLayout(examples)
+        layout.addWidget(self.examples_widget)
         self.result_label = label("", "count")
         self.result_label.setWordWrap(True)
         self.result_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -515,16 +522,22 @@ class MainWindow(QMainWindow):
         self.forward_button.setToolTip('Go forward (Alt+Right)')
         self.forward_button.setEnabled(False)
         navigation_row.addWidget(self.forward_button)
+        navigation_row.addWidget(self.handwriting_button)
         navigation_row.addStretch()
         navigation_row.addWidget(self.result_label)
         layout.addLayout(navigation_row)
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
+        self.search_splitter = splitter
+        left = QSplitter(Qt.Orientation.Vertical)
+        left.setChildrenCollapsible(False)
+        self.results_splitter = left
+        results_panel = QWidget()
+        left_layout = QVBoxLayout(results_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         self.results = QListWidget()
         self.results.setWordWrap(True)
         self.results.setAccessibleName("Dictionary results")
+        self.results.setMinimumHeight(90)
         self.results.currentItemChanged.connect(self.select_result)
         self.results.itemClicked.connect(self.activate_result)
         self.results.itemActivated.connect(self.activate_result)
@@ -535,6 +548,7 @@ class MainWindow(QMainWindow):
         self.export_button = button("Export saved words…", self.export_saved)
         self.export_button.hide()
         left_layout.addWidget(self.export_button)
+        left.addWidget(results_panel)
         splitter.addWidget(left)
         self.tabs = QTabWidget()
         self.word_view = QTextBrowser()
@@ -558,13 +572,25 @@ class MainWindow(QMainWindow):
         self.recursive.toggled.connect(lambda: self.show_character(self.current_char))
         char_row.addWidget(self.recursive)
         char_layout.addLayout(char_row)
-        char_layout.addWidget(button("Stroke analysis ↗", lambda: self.open_character_analysis(self.current_char)),
+        char_layout.addWidget(button("Strokes, readings && parts", lambda: self.open_character_analysis(self.current_char)),
                               alignment=Qt.AlignmentFlag.AlignLeft)
         self.char_view = QTextBrowser()
         self.char_view.setOpenLinks(False)
         self.char_view.anchorClicked.connect(self.handle_link)
         char_layout.addWidget(self.char_view)
         self.tabs.addTab(char_panel, "Character explorer")
+        self.analysis_page = QWidget()
+        self.analysis_layout = QVBoxLayout(self.analysis_page)
+        self.analysis_layout.setContentsMargins(0,0,0,0)
+        self.analysis_placeholder = QWidget()
+        placeholder_layout = QVBoxLayout(self.analysis_placeholder)
+        placeholder_layout.addWidget(label('Character analysis is open in a separate window.', 'muted'))
+        placeholder_layout.addWidget(button('Return analysis to main window', self.return_analysis))
+        placeholder_layout.addStretch()
+        self.analysis_placeholder.hide()
+        self.analysis_layout.addWidget(self.analysis_placeholder)
+        self.tabs.addTab(self.analysis_page, 'Character analysis')
+        self.tabs.setStyleSheet('QTabBar::tab {padding:10px 9px;}')
         splitter.addWidget(self.tabs)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 6)
@@ -603,7 +629,7 @@ class MainWindow(QMainWindow):
         self.addAction(search_action)
         handwriting_action = QAction(self)
         handwriting_action.setShortcut(QKeySequence('Ctrl+H'))
-        handwriting_action.triggered.connect(self.open_handwriting)
+        handwriting_action.triggered.connect(self.toggle_handwriting)
         self.addAction(handwriting_action)
         for sequence, callback in (('Alt+Left', self.go_back), ('Alt+Right', self.go_forward)):
             action = QAction(self)
@@ -616,6 +642,9 @@ class MainWindow(QMainWindow):
         self.set_query("学校")
 
     def navigation_key(self):
+        if self.tabs.currentIndex() == 2 and self.analysis_window:
+            panel = self.analysis_window
+            return ('analysis',panel.root_char,panel.mode,panel.char,panel.details.currentIndex(),self.filter_panel.signature())
         if self.tabs.currentIndex() == 1:
             return ('character', self.current_char, self.filter_panel.signature())
         if self.current_entry:
@@ -628,6 +657,23 @@ class MainWindow(QMainWindow):
 
     def toggle_filters(self):
         self.filter_dock.setVisible(self.filter_dock.isHidden())
+        if self._tool_space_active:
+            self._tool_filters_restore = not self.filter_dock.isHidden()
+
+    def tool_space_needed(self):
+        return bool((self.handwriting_window and self.handwriting_window.isVisible()) or
+                    (self.tabs.currentIndex() == 2 and not (self.analysis_popup and self.analysis_popup.isVisible())))
+
+    def update_tool_space(self):
+        if self._closing or self._restoring_navigation or not hasattr(self,'filter_dock'):
+            return
+        needed = self.tool_space_needed()
+        if needed and not self._tool_space_active:
+            self._tool_filters_restore = not self.filter_dock.isHidden()
+            self.filter_dock.hide()
+        elif not needed and self._tool_space_active:
+            self.filter_dock.setVisible(self._tool_filters_restore)
+        self._tool_space_active = needed
 
     def reset_filters(self):
         blocked = self.language.blockSignals(True)
@@ -656,6 +702,8 @@ class MainWindow(QMainWindow):
             'char_scroll': self.char_view.verticalScrollBar().value(),
             'query': self.search_input.text(), 'language': self.language.currentIndex(), 'mode': self.mode,
             'result_query': self._result_query,
+            'analysis': self.analysis_window.snapshot() if self.analysis_window and self.analysis_window.root_char else None,
+            'tool_space_active': self._tool_space_active, 'tool_filters_restore': self._tool_filters_restore,
             'sources': self.filter_panel.selected_sources(), 'directions': self.filter_panel.selected_directions(),
             'corpus':self.filter_panel.corpus_check.isChecked(), 'example_limit':self.example_limit,
             'filters_visible': not self.filter_dock.isHidden(),
@@ -669,10 +717,12 @@ class MainWindow(QMainWindow):
         }
 
     def save_navigation_position(self):
-        if self._restoring_navigation or self._navigation_index < 0:
+        if self._restoring_navigation or self._opening_analysis or self._navigation_index < 0:
             return
         page = self._navigation_history[self._navigation_index]
         page['filters_visible'] = not self.filter_dock.isHidden()
+        page['tool_space_active'] = self._tool_space_active
+        page['tool_filters_restore'] = self._tool_filters_restore
         # Save the document being left, even after the user has switched tabs.
         # Keep its recorded query/results: an asynchronous search may already
         # be preparing the next page's context.
@@ -681,6 +731,12 @@ class MainWindow(QMainWindow):
             page['word_scroll'] = self.word_view.verticalScrollBar().value()
         elif kind == 'character' and self.current_char == value:
             page['char_scroll'] = self.char_view.verticalScrollBar().value()
+        elif kind == 'analysis' and self.analysis_window and page.get('analysis'):
+            state = self.analysis_window.snapshot()
+            previous = page['analysis']
+            if (state['root'],state['mode'],state['char']) == (previous['root'],previous['mode'],previous['char']):
+                state['detail'] = previous['detail']
+                page['analysis'] = state
         if page['query'] == self.search_input.text() and page['language'] == self.language.currentIndex():
             page['result_scroll'] = self.results.verticalScrollBar().value()
 
@@ -708,10 +764,23 @@ class MainWindow(QMainWindow):
             self.tabs.setCurrentIndex(index)
         finally:
             self.tabs.blockSignals(blocked)
+        self.update_tool_space()
 
     def detail_tab_changed(self, index):
         if not self._restoring_navigation:
             self.save_navigation_position()
+            if index == 2 and not (self.analysis_popup and self.analysis_popup.isVisible()):
+                char = self.current_char
+                previous = self._navigation_history[self._navigation_index] if self._navigation_index >= 0 else None
+                if previous and previous['tab'] == 0 and self.current_entry:
+                    word = self.current_entry['headword']
+                    panel = self.analysis_window
+                    char = panel.root_char if panel and (panel.root_char in word or panel.char in word) else next(
+                        (c for c in word if is_han(c)),char)
+                if self.analysis_window is None or char not in (self.analysis_window.root_char,self.analysis_window.char):
+                    self.open_character_analysis(char)
+                    return
+            self.update_tool_space()
             self.record_navigation_page()
 
     def go_back(self):
@@ -741,6 +810,8 @@ class MainWindow(QMainWindow):
             self.filter_panel.restore_selection(page['sources'], page['directions'],page.get('corpus',False))
             self.example_limit=page.get('example_limit',4)
             self.filter_dock.setVisible(page['filters_visible'])
+            self._tool_space_active = page.get('tool_space_active',False)
+            self._tool_filters_restore = page.get('tool_filters_restore',False)
             self.mode = page['mode']
             self._result_query = page.get('result_query')
             for key, nav in self.nav.items():
@@ -765,6 +836,9 @@ class MainWindow(QMainWindow):
             self.compound_limit = page['compound_limit']
             self.word_view.setHtml(page['word_html'])
             self.char_view.setHtml(page['char_html'])
+            if page.get('analysis'):
+                self.ensure_analysis()
+                self.analysis_window.restore(page['analysis'])
             self.tabs.setCurrentIndex(page['tab'])
             self.save_button.setEnabled(self.current_entry is not None)
             self.update_save_label()
@@ -1159,7 +1233,6 @@ class MainWindow(QMainWindow):
         kind = url.scheme()
         value = unquote(url.toString().split(":", 1)[1])
         if kind == "char" and len(value) == 1:
-            self.show_character(value)
             self.open_character_analysis(value)
         elif kind == 'analyse' and len(value) == 1:
             self.open_character_analysis(value)
@@ -1229,12 +1302,30 @@ class MainWindow(QMainWindow):
     def open_handwriting(self):
         self.autocomplete.dismiss()
         if self.handwriting_window is None:
-            self.handwriting_window = HandwritingWindow(self.db, self)
+            self.handwriting_window = HandwritingWindow(self.db, self.results_splitter, embedded=True)
+            self.results_splitter.insertWidget(0,self.handwriting_window)
             self.handwriting_window.lookup_requested.connect(self.lookup_handwriting)
             self.handwriting_window.insert_requested.connect(self.insert_handwriting)
+            self.handwriting_window.close_requested.connect(self.close_handwriting)
+        self.examples_widget.hide()
         self.handwriting_window.show()
-        self.handwriting_window.raise_()
-        self.handwriting_window.activateWindow()
+        self.update_tool_space()
+        self.handwriting_button.setChecked(True)
+        self.search_splitter.setSizes([355,max(420,self.search_splitter.width()-355)])
+        self.results_splitter.setSizes([330,max(100,self.results_splitter.height()-330)])
+
+    def toggle_handwriting(self):
+        if self.handwriting_window and self.handwriting_window.isVisible():
+            self.close_handwriting()
+        else:
+            self.open_handwriting()
+
+    def close_handwriting(self):
+        if self.handwriting_window:
+            self.handwriting_window.hide()
+        self.handwriting_button.setChecked(False)
+        self.examples_widget.show()
+        self.update_tool_space()
 
     def lookup_handwriting(self, char, mode):
         self.set_query(char)
@@ -1248,14 +1339,81 @@ class MainWindow(QMainWindow):
     def open_character_analysis(self, char, mode=None):
         if not is_han(char):
             return
+        self.save_navigation_position()
+        self.ensure_analysis()
+        self._opening_analysis = True
+        try:
+            if not self.analysis_popup or not self.analysis_popup.isVisible():
+                self.set_detail_tab(2)
+            self.analysis_window.show_character(char,mode)
+        finally:
+            self._opening_analysis = False
+        self.analysis_window.show()
+        if self.analysis_popup and self.analysis_popup.isVisible():
+            self.analysis_popup.raise_()
+            self.analysis_popup.activateWindow()
+        self.record_navigation_page()
+
+    def ensure_analysis(self):
         if self.analysis_window is None:
-            self.analysis_window = AnalysisWindow(self.db,self.filter_kwargs,self)
+            self.analysis_window = AnalysisWindow(self.db,self.filter_kwargs,self.analysis_page,embedded=True)
+            self.analysis_layout.addWidget(self.analysis_window)
             self.analysis_window.entry_requested.connect(self.open_analysis_entry)
             self.analysis_window.explorer_requested.connect(self.open_analysis_explorer)
-        self.analysis_window.show_character(char,mode)
+            self.analysis_window.popout_requested.connect(self.toggle_analysis_popout)
+            self.analysis_window.character_changing.connect(self.save_navigation_position)
+            self.analysis_window.character_changed.connect(self.analysis_changed)
+            self.analysis_window.details.currentChanged.connect(self.analysis_detail_changed)
+
+    def analysis_changed(self):
+        if self._restoring_navigation or self._closing:
+            return
+        panel = self.analysis_window
+        if panel.char != self.current_char:
+            self.show_character(panel.char,activate=False)
+        if self.analysis_popup:
+            self.analysis_popup.setWindowTitle(panel.windowTitle())
+        if self.tabs.currentIndex() == 2:
+            self.record_navigation_page()
+
+    def analysis_detail_changed(self, index):
+        if not self._restoring_navigation and not self._closing and self.tabs.currentIndex() == 2:
+            self.save_navigation_position()
+            self.record_navigation_page()
+
+    def toggle_analysis_popout(self):
+        if self.analysis_popup and self.analysis_popup.isVisible():
+            self.return_analysis()
+            return
+        self.ensure_analysis()
+        if self.analysis_popup is None:
+            self.analysis_popup = AnalysisPopup(self)
+            self.analysis_popup.resize(800,740)
+            self.analysis_popup.setMinimumSize(480,500)
+            QVBoxLayout(self.analysis_popup)
+            self.analysis_popup.return_requested.connect(self.return_analysis)
+        self.analysis_window.canvas.pause()
+        self.analysis_popup.layout().addWidget(self.analysis_window)
+        self.analysis_window.popout_button.setText('Return to main window')
+        self.analysis_placeholder.show()
+        self.analysis_popup.setWindowTitle(self.analysis_window.windowTitle())
         self.analysis_window.show()
-        self.analysis_window.raise_()
-        self.analysis_window.activateWindow()
+        self.analysis_popup.show()
+        self.update_tool_space()
+        self.analysis_popup.raise_()
+        self.analysis_popup.activateWindow()
+
+    def return_analysis(self):
+        if self.analysis_window and self.analysis_popup:
+            self.analysis_window.canvas.pause()
+            self.analysis_layout.addWidget(self.analysis_window)
+            self.analysis_placeholder.hide()
+            self.analysis_window.popout_button.setText('Pop out ↗')
+            self.analysis_popup.hide()
+            self.analysis_window.show()
+            if not self._closing:
+                self.set_detail_tab(2)
+                self.record_navigation_page()
 
     def open_analysis_entry(self, entry_id):
         self.show_entry(entry_id)
@@ -1350,6 +1508,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Cancelling dictionary installation safely. Close again when it finishes.")
             event.ignore()
             return
+        self._closing = True
         self.timer.stop()
         self.generation += 1  # Reject queued results before closing the databases.
         for worker in self.workers:
@@ -1360,5 +1519,7 @@ class MainWindow(QMainWindow):
             self.handwriting_window.shutdown()
         if self.analysis_window:
             self.analysis_window.shutdown()
+        if self.analysis_popup:
+            self.analysis_popup.hide()
         self.db.close()
         event.accept()

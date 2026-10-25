@@ -32,11 +32,13 @@ def smoke_build(executable):
             startup = subprocess.STARTUPINFO()
             startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startup.wShowWindow = subprocess.SW_HIDE
-        result = subprocess.run([str(executable), '--home', str(home), '--screenshot', str(capture)],
-                                env=env, startupinfo=startup, timeout=30)
-        if result.returncode or not capture.exists() or capture.stat().st_size < 100:
-            raise RuntimeError(f'Packaged application failed to launch (exit {result.returncode})')
-        print('Packaged application launch passed: actual executable imported Qt and rendered its window.', flush=True)
+        for name, arguments in [('startup', []), ('workspace', ['--character','木','--handwriting'])]:
+            capture = home / f'{name}.png'
+            result = subprocess.run([str(executable), '--home', str(home), '--screenshot', str(capture), *arguments],
+                                    env=env, startupinfo=startup, timeout=30)
+            if result.returncode or not capture.exists() or capture.stat().st_size < 100:
+                raise RuntimeError(f'Packaged application failed to launch {name} (exit {result.returncode})')
+        print('Packaged application launch passed: main window and embedded character / handwriting tools rendered.', flush=True)
 
 
 if __name__ == '__main__':

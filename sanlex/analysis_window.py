@@ -5,9 +5,9 @@ import re
 from urllib.parse import quote, unquote
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence, QPalette
 from PySide6.QtWidgets import (QApplication,QCheckBox,QComboBox,QDialog,QHBoxLayout,
-    QLabel,QLineEdit,QPushButton,QSlider,QSplitter,QTabBar,QTabWidget,QTextBrowser,QVBoxLayout,QWidget)
+    QLabel,QLineEdit,QPushButton,QScrollArea,QSlider,QSplitter,QTabBar,QTabWidget,QTextBrowser,QVBoxLayout,QWidget)
 
 from .stroke_widget import StrokeCanvas
 from .strokes import CharacterAnalysis, MODES, StrokeStore
@@ -27,16 +27,33 @@ def document(body, language='jp'):
         .muted {color:#6d7b73;font-size:12px;} td {padding:5px;}''' + REGIONAL_FONT_CSS + '</style></head><body>' + body + '</body></html>'
 
 
+class AnalysisPopup(QDialog):
+    return_requested = Signal()
+
+    def closeEvent(self, event):
+        self.return_requested.emit()
+        event.accept()
+
+    def reject(self):
+        self.close()
+
+
 class AnalysisWindow(QDialog):
     entry_requested = Signal(str)
     explorer_requested = Signal(str)
+    character_changed = Signal()
+    character_changing = Signal()
+    popout_requested = Signal()
 
-    def __init__(self,db,filter_provider,parent=None):
+    def __init__(self,db,filter_provider,parent=None,*,embedded=False):
         super().__init__(parent)
+        self.embedded = embedded
+        if embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle('Character analysis · SanLex')
         self.setModal(False)
         self.resize(850,850)
-        self.setMinimumSize(700,770)
+        self.setMinimumSize(420,380) if embedded else self.setMinimumSize(700,770)
         self.db, self.filter_provider = db, filter_provider
         self.store = StrokeStore()
         self.model = CharacterAnalysis(db,self.store)
@@ -48,7 +65,10 @@ class AnalysisWindow(QDialog):
         self.word_limit, self.parent_limit = 40,100
         self._loading = False
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16,12,16,12)
+        layout.setContentsMargins(8,8,8,8) if embedded else layout.setContentsMargins(16,12,16,12)
+        if embedded:
+            self.setStyleSheet('QPushButton {padding:5px 7px;} QTabBar::tab {padding:8px 9px;}'
+                               'QTextBrowser {padding:7px;} QCheckBox {padding:2px;spacing:4px;}')
         row = QHBoxLayout()
         self.back = QPushButton('← Back')
         self.forward = QPushButton('Forward →')
@@ -56,6 +76,9 @@ class AnalysisWindow(QDialog):
         self.forward.clicked.connect(lambda: self.travel(1))
         row.addWidget(self.back)
         row.addWidget(self.forward)
+        if embedded:
+            self.back.hide()
+            self.forward.hide()
         self.input = QLineEdit()
         self.input.setMaximumWidth(90)
         self.input.setStyleSheet('QLineEdit {padding:6px;font-size:19px;}')
@@ -73,11 +96,18 @@ class AnalysisWindow(QDialog):
         atlas = QPushButton('Full explorer')
         atlas.clicked.connect(lambda: self.explorer_requested.emit(self.char))
         row.addWidget(atlas)
+        self.popout_button = QPushButton('Pop out ↗')
+        self.popout_button.setAccessibleName('Pop out character analysis')
+        self.popout_button.clicked.connect(self.popout_requested)
+        self.popout_button.setVisible(embedded)
+        if embedded:
+            row.addWidget(self.popout_button)
         layout.addLayout(row)
         self.modes = QTabBar()
         self.modes.setExpanding(True)
         for key,(title,_) in MODES.items():
-            self.modes.addTab(title)
+            self.modes.addTab({'hans':'Simplified', 'hant':'Traditional', 'ja':'Japanese'}[key] if embedded else title)
+            self.modes.setTabToolTip(self.modes.count()-1,title)
         self.modes.setCurrentIndex(list(MODES).index(self.mode))
         self.modes.currentChanged.connect(self.mode_changed)
         layout.addWidget(self.modes)
@@ -93,11 +123,13 @@ class AnalysisWindow(QDialog):
         self.variant_note.setWordWrap(True)
         self.variant_note.setObjectName('muted')
         variant_row.addWidget(self.variant_note,1)
+        if embedded:
+            self.variant_note.hide()
         layout.addLayout(variant_row)
         upper = QHBoxLayout()
         drawing = QVBoxLayout()
         self.canvas = StrokeCanvas()
-        self.canvas.setFixedSize(240,240)
+        self.canvas.setFixedSize(180,180) if embedded else self.canvas.setFixedSize(240,240)
         drawing.addWidget(self.canvas,0,Qt.AlignmentFlag.AlignHCenter)
         controls = QHBoxLayout()
         self.restart = QPushButton('↺')
@@ -138,7 +170,15 @@ class AnalysisWindow(QDialog):
         upper.addLayout(drawing)
         self.info = self.browser()
         upper.addWidget(self.info,1)
-        layout.addLayout(upper)
+        stroke_page = QWidget()
+        palette = stroke_page.palette()
+        palette.setColor(QPalette.ColorRole.Window,QColor('#fffef9'))
+        palette.setColor(QPalette.ColorRole.WindowText,QColor('#202c32'))
+        stroke_page.setPalette(palette)
+        stroke_page.setAutoFillBackground(True)
+        stroke_layout = QVBoxLayout(stroke_page)
+        stroke_layout.setContentsMargins(0,0,0,0)
+        stroke_layout.addLayout(upper)
         options = QHBoxLayout()
         for title,field,checked in [('Grid','grid',True),('Stroke numbers','numbers',True),
                                     ('Outline guide','shadow',True),('Loop','loop',False)]:
@@ -149,14 +189,16 @@ class AnalysisWindow(QDialog):
         options.addStretch()
         self.nested = QCheckBox('Include nested parts')
         self.nested.toggled.connect(self.refresh_parents)
-        options.addWidget(self.nested)
-        layout.addLayout(options)
+        if not embedded:
+            options.addWidget(self.nested)
+        stroke_layout.addLayout(options)
         self.availability = QLabel()
         self.availability.setWordWrap(True)
         self.availability.setObjectName('muted')
-        layout.addWidget(self.availability)
+        stroke_layout.addWidget(self.availability)
+        stroke_layout.addStretch()
         self.details = QTabWidget()
-        self.details.setMinimumHeight(200)
+        self.details.setMinimumHeight(140 if embedded else 200)
         self.parts, self.part_of, self.words = self.browser(), self.browser(), self.browser()
         self.parts.setAccessibleName('Parts of this character')
         self.part_of.setAccessibleName('Characters this is part of')
@@ -172,15 +214,35 @@ class AnalysisWindow(QDialog):
         self.parts_splitter.setStyleSheet('QSplitter::handle {background:#d7ded7;}')
         self.details.addTab(self.parts_splitter,'Parts / Part of')
         self.details.addTab(self.words,'Words containing this character')
+        if embedded:
+            stroke_scroll = QScrollArea()
+            stroke_scroll.setWidgetResizable(True)
+            stroke_scroll.setWidget(stroke_page)
+            self.details.insertTab(0,stroke_scroll,'Strokes / readings')
+            self.details.setTabText(1,'Parts / Part of')
+            self.details.setTabText(2,'Words')
+            parts_page = QWidget()
+            parts_layout = QVBoxLayout(parts_page)
+            parts_layout.setContentsMargins(0,0,0,0)
+            parts_layout.addWidget(self.nested)
+            self.details.removeTab(1)
+            parts_layout.addWidget(self.parts_splitter,1)
+            self.details.insertTab(1,parts_page,'Parts / Part of')
+            self.details.setCurrentIndex(0)
+        else:
+            layout.addWidget(stroke_page)
         layout.addWidget(self.details,1)
         attribution = QLabel('Stroke shapes: AnimCJK © FM&SH / Arphic · No warranty · Redistributable under the Arphic Public License. '
                              'Data, licences and original files are included in the application folder.')
         attribution.setWordWrap(True)
         attribution.setObjectName('muted')
+        if embedded:
+            attribution.setToolTip(attribution.text())
+            attribution.setText('AnimCJK · Offline strokes · Source and licences in Dictionaries & sources')
         layout.addWidget(attribution)
         self.canvas.position_changed.connect(self.position_changed)
         self.canvas.playing_changed.connect(lambda playing: self.play.setText('Pause' if playing else 'Play'))
-        for shortcut,callback in [('Alt+Left',lambda:self.travel(-1)),('Alt+Right',lambda:self.travel(1))]:
+        for shortcut,callback in ([] if embedded else [('Alt+Left',lambda:self.travel(-1)),('Alt+Right',lambda:self.travel(1))]):
             action = QAction(self)
             action.setShortcut(QKeySequence(shortcut))
             action.triggered.connect(callback)
@@ -191,6 +253,10 @@ class AnalysisWindow(QDialog):
         browser.setOpenLinks(False)
         browser.anchorClicked.connect(self.handle_link)
         return browser
+
+    def reject(self):
+        if not self.embedded:
+            super().reject()
 
     def explore_input(self):
         char = self.input.text().strip()
@@ -209,6 +275,7 @@ class AnalysisWindow(QDialog):
         selected = selected if selected in variants else variants[0]
         changed = (self.root_char,self.mode,self.char) != (char,mode,selected)
         if changed:
+            self.character_changing.emit()
             self.word_limit, self.parent_limit = 40,100
         self._loading = True
         self.root_char, self.mode, self.char = char,mode,selected
@@ -221,6 +288,7 @@ class AnalysisWindow(QDialog):
         self.variants.setEnabled(len(variants)>1)
         self.variant_note.setText('Multiple forms are recorded; choose the intended character.' if len(variants)>1 else
                                  (f'From {char}: {MODES[mode][0]} form.' if char != selected else 'Same character codepoint; regional glyphs and stroke order may differ.'))
+        self.variants.setToolTip(self.variant_note.text())
         self.setWindowTitle(f'{selected} · {MODES[mode][0]} · Character analysis · SanLex')
         self._loading = False
         self.db.set_preference('character-analysis-mode',mode)
@@ -232,6 +300,25 @@ class AnalysisWindow(QDialog):
             self.history_index = len(self.history)-1
         self.back.setEnabled(self.history_index>0)
         self.forward.setEnabled(self.history_index<len(self.history)-1)
+        self.character_changed.emit()
+
+    def snapshot(self):
+        return {'root': self.root_char, 'mode': self.mode, 'char': self.char,
+                'detail': self.details.currentIndex(), 'nested': self.nested.isChecked(),
+                'word_limit': self.word_limit, 'parent_limit': self.parent_limit,
+                'position': self.canvas.position,
+                'scrolls': [view.verticalScrollBar().value() for view in (self.info,self.parts,self.part_of,self.words)]}
+
+    def restore(self, state):
+        self.nested.setChecked(state['nested'])
+        self.show_character(state['root'],state['mode'],state['char'],record_history=False)
+        self.word_limit, self.parent_limit = state['word_limit'],state['parent_limit']
+        self.refresh_words()
+        self.refresh_parents()
+        self.details.setCurrentIndex(state['detail'])
+        self.canvas.set_position(state['position'])
+        for view,position in zip((self.info,self.parts,self.part_of,self.words),state['scrolls']):
+            view.verticalScrollBar().setValue(position)
 
     def mode_changed(self,index):
         if not self._loading and self.root_char:

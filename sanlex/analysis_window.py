@@ -12,18 +12,19 @@ from PySide6.QtWidgets import (QApplication,QCheckBox,QComboBox,QDialog,QHBoxLay
 from .stroke_widget import StrokeCanvas
 from .strokes import CharacterAnalysis, MODES, StrokeStore
 from .text import is_han, radical_label
+from .fonts import REGIONAL_FONT_CSS, font_style, language_html
 
 
 def link(kind,value,label=None,large=False):
     return f'<a href="{kind}:{quote(value,safe="")}"' + (' style="font-size:29px"' if large else '') + '>' + escape(label or value) + '</a>'
 
 
-def document(body):
-    return '''<html><head><style>body {font-family:'Segoe UI','Yu Gothic UI','Microsoft JhengHei';
+def document(body, language='jp'):
+    return '<html><head><style>body {' + font_style(language) + '''
         color:#203c36;background:#fffef9;font-size:14px;margin:12px;line-height:1.5;}
         h2 {font-size:18px;color:#214b40;margin:8px 0;} h3 {font-size:15px;margin:10px 0 3px;}
         p {margin:5px 0 10px;} a {color:#236e60;text-decoration:none;}
-        .muted {color:#6d7b73;font-size:12px;} td {padding:5px;}</style></head><body>''' + body + '</body></html>'
+        .muted {color:#6d7b73;font-size:12px;} td {padding:5px;}''' + REGIONAL_FONT_CSS + '</style></head><body>' + body + '</body></html>'
 
 
 class AnalysisWindow(QDialog):
@@ -288,7 +289,7 @@ class AnalysisWindow(QDialog):
         if self.mode!='ja':
             body += '<p class="muted">Readings and meanings: Unicode Unihan. Mandarin readings apply across both Chinese tabs.</p>'
         body += '<p class="muted"><a href="https://github.com/parsimonhi/animCJK">AnimCJK source &amp; coverage</a></p>'
-        self.info.setHtml(document(body))
+        self.info.setHtml(document(body, self.mode))
 
     def refresh_parts(self):
         parts = self.model.components(self.char,self.mode)
@@ -303,7 +304,7 @@ class AnalysisWindow(QDialog):
                 body += '<p>' + label + ': ' + ' · '.join(link('char',c,large=True) for c in chars) + '</p>'
         body += '<p class="muted">Click a part to analyse it. Parts describe written structure; they are distinct from dictionary radicals. '
         body += 'Japanese and Chinese variants are not always interchangeable. Shared IDS structures are labelled when no regional decomposition is available.</p>'
-        self.parts.setHtml(document(body))
+        self.parts.setHtml(document(body, self.mode))
 
     def refresh_parents(self):
         if not self.char:
@@ -313,7 +314,7 @@ class AnalysisWindow(QDialog):
         body += '<p class="muted">Regional AnimCJK structures, with matching or shared IDS structures for other characters. ↗ = nested relationship.</p>'
         if more:
             body += '<p>' + link('parentsmore',self.char,'Show 100 more characters') + '</p>'
-        self.part_of.setHtml(document(body))
+        self.part_of.setHtml(document(body, self.mode))
 
     def refresh_words(self):
         if not self.char:
@@ -323,15 +324,15 @@ class AnalysisWindow(QDialog):
         if words:
             body += '<table width="100%">'
             for word in words[:self.word_limit]:
-                body += '<tr><td>' + link('entry',word['id'],word['display_word']) + '<br><span class="muted">' + escape(word['reading']) + '</span></td><td>'
-                body += escape('; '.join(word['glosses'][:2])[:250]) + '<br><span class="muted">' + escape(word['source']) + ' · '
+                body += '<tr><td>' + language_html(link('entry',word['id'],word['display_word']) + '<br><span class="muted">' + escape(word['reading']) + '</span>', word['lang']) + '</td><td>'
+                body += language_html(escape('; '.join(word['glosses'][:2])[:250]), word['definition_lang']) + '<br><span class="muted">' + escape(word['source']) + ' · '
                 body += word['lang'].upper() + ' → ' + word['definition_lang'].upper() + '</span></td></tr>'
             body += '</table>'
         else:
             body += '<p>No matching words in the selected dictionaries and directions.</p>'
         if len(words)>self.word_limit:
             body += '<p>' + link('wordsmore',self.char,'Show 40 more word entries') + '</p>'
-        self.words.setHtml(document(body))
+        self.words.setHtml(document(body, self.mode))
 
     def toggle_play(self):
         self.canvas.pause() if self.canvas.timer.isActive() else self.canvas.play()

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
 
 from .db import Dictionary, resource_path
 from .filters import FilterPanel
+from .fonts import REGIONAL_FONT_CSS, entry_font, font_style, language_html
 from .analysis_window import AnalysisWindow
 from .examples import corpus_examples, dictionary_examples
 from .autocomplete import Autocomplete
@@ -93,8 +94,13 @@ hr {color:#e3e8dd;}
 """
 
 
-def html(body: str) -> str:
-    return f"<html><head><style>{HTML_STYLE}</style></head><body>{body}</body></html>"
+def html(body: str, language=None) -> str:
+    style = HTML_STYLE
+    if language:
+        # Qt rich text reapplies body CSS to descendants, overriding an inline
+        # body font. Set the regional preference in the stylesheet itself.
+        style = re.sub(r'font-family:[^;]+;', font_style(language), style, count=1)
+    return f"<html><head><style>{style}\n{REGIONAL_FONT_CSS}</style></head><body>{body}</body></html>"
 
 
 def link(kind: str, value: str, label: str | None = None, css="") -> str:
@@ -650,7 +656,7 @@ class MainWindow(QMainWindow):
             'corpus':self.filter_panel.corpus_check.isChecked(), 'example_limit':self.example_limit,
             'filters_visible': not self.filter_dock.isHidden(),
             'results': [(self.results.item(i).text(), self.results.item(i).data(Qt.ItemDataRole.UserRole),
-                         self.results.item(i).toolTip()) for i in range(self.results.count())],
+                         self.results.item(i).toolTip(), self.results.item(i).font()) for i in range(self.results.count())],
             'result_row': self.results.currentRow(), 'result_scroll': self.results.verticalScrollBar().value(),
             'result_label': self.result_label.text(), 'result_limit': self.result_limit,
             'more_results': not self.more_button.isHidden(), 'export': not self.export_button.isHidden(),
@@ -735,8 +741,9 @@ class MainWindow(QMainWindow):
             for key, nav in self.nav.items():
                 nav.setChecked(key == self.mode)
             self.results.clear()
-            for text, data, tooltip in page['results']:
+            for text, data, tooltip, font in page['results']:
                 item = QListWidgetItem(text)
+                item.setFont(font)
                 item.setData(Qt.ItemDataRole.UserRole, data)
                 item.setToolTip(tooltip)
                 self.results.addItem(item)
@@ -883,6 +890,7 @@ class MainWindow(QMainWindow):
             definition_lang = entry.get('definition_lang', 'en').upper()
             text = f"{entry['headword']}    {entry['lang'].upper()} → {definition_lang}\n{entry['reading']}\n{meaning}"
             item = QListWidgetItem(text)
+            item.setFont(entry_font(entry['lang'], self.results.font()))
             item.setData(Qt.ItemDataRole.UserRole, ("entry", entry["id"]))
             item.setToolTip(f"{entry['source']} · " + "; ".join(entry["glosses"]))
             self.results.addItem(item)
@@ -929,7 +937,7 @@ class MainWindow(QMainWindow):
             tags = [*sense.get("pos", []), *sense.get("tags", [])]
             if tags:
                 body += "<p class='tag'>" + esc(" · ".join(tags)) + "</p>"
-            body += f"<p><b>{number:02d}</b> &nbsp; " + analysis_text("; ".join(sense["glosses"])) + "</p>"
+            body += f"<p><b>{number:02d}</b> &nbsp; " + language_html(analysis_text("; ".join(sense["glosses"])), entry.get('definition_lang', 'en')) + "</p>"
             for field, title in (("spellings", "Applies to"), ("readings", "Reading"), ("xref", "See also")):
                 if sense.get(field):
                     body += f"<p class='muted'>{title}: {analysis_text(' · '.join(sense[field]))}</p>"
@@ -952,7 +960,7 @@ class MainWindow(QMainWindow):
             for localized in localized_entries:
                 glosses = [g for g in localized['glosses'] if g not in seen_glosses]
                 seen_glosses.update(glosses)
-                body += ''.join('<li>' + analysis_text(g[:240] + ('…' if len(g) > 240 else '')) + '</li>' for g in glosses[:3])
+                body += ''.join('<li>' + language_html(analysis_text(g[:240] + ('…' if len(g) > 240 else '')), native_lang) + '</li>' for g in glosses[:3])
             body += '</ul><p>' + ' · '.join(link('entry', e['id'], f"Full source entry {i+1}") for i,e in enumerate(localized_entries)) + '</p>'
         body += "<hr><h2>Across languages · JP / EN / CN</h2>"
         mappings = self.db.mappings(entry, **self.filter_kwargs())
@@ -965,9 +973,11 @@ class MainWindow(QMainWindow):
                 if key in seen:
                     continue
                 seen.add(key)
-                body += "<tr><td bgcolor='#edf3e8'>" + (link("entry", candidate["id"], shown_word) if candidate['id'] else link('lookup', shown_word))
-                body += f" &nbsp; {esc(candidate['reading'])} · {candidate['lang'].upper()}<br><span class='muted'>{esc(reason)}</span>"
-                body += f"<br>{analysis_text('; '.join(candidate['glosses'][:3]))}</td></tr>"
+                body += "<tr><td bgcolor='#edf3e8'>" + language_html(
+                    (link("entry", candidate["id"], shown_word) if candidate['id'] else link('lookup', shown_word))
+                    + f" &nbsp; {esc(candidate['reading'])}", candidate['lang'])
+                body += f" · {candidate['lang'].upper()}<br><span class='muted'>{esc(reason)}</span>"
+                body += '<br>' + language_html(analysis_text('; '.join(candidate['glosses'][:3])), candidate.get('definition_lang', 'en')) + '</td></tr>'
                 if candidate.get('_source_url'):
                     body += f"<tr><td><a href='{esc(candidate['_source_url'], quote=True)}'>Wiktionary source &amp; edit history ↗</a></td></tr>"
             body += "</table><p class='muted'>Wiktionary translations retain their source sense labels and may apply to a different sense of this headword. Suggestions use matching English glosses; check register and usage.</p>"
@@ -981,7 +991,7 @@ class MainWindow(QMainWindow):
             if sense.get('source_url'):
                 body += f"<p><a href='{esc(sense['source_url'], quote=True)}'>Original Wiktionary page &amp; contributor history ↗</a></p>"
                 break
-        self.word_view.setHtml(html(body))
+        self.word_view.setHtml(html(body, entry['lang']))
         if activate:
             self.set_detail_tab(0)
         if visible:
@@ -1089,7 +1099,9 @@ class MainWindow(QMainWindow):
         if compounds:
             body += "<ul>"
             for word in compounds:
-                body += "<li>" + link("entry", word["id"], word["headword"]) + f" &nbsp; <span class='muted'>{word['lang'].upper()} · {esc(word['reading'])}</span> — {esc('; '.join(word['glosses'][:2]))}</li>"
+                body += '<li>' + language_html(link('entry', word['id'], word['headword'])
+                    + f" &nbsp; <span class='muted'>{word['lang'].upper()} · {esc(word['reading'])}</span>", word['lang'])
+                body += ' — ' + language_html(esc('; '.join(word['glosses'][:2])), word.get('definition_lang', 'en')) + '</li>'
             body += f"</ul><p class='muted'>{len(compounds)} word entries shown, filtered by dictionary, direction and language.</p>"
             if more_words:
                 body += '<p>' + link('wordmore', char, 'Show 40 more word entries') + '</p>'
@@ -1146,11 +1158,11 @@ class MainWindow(QMainWindow):
             if note:
                 body+="<p class='muted'>"+note+'</p>'
             for example in examples:
-                body+='<p>'+analysis_text(example['text'])
+                body+='<p>'+language_html(analysis_text(example['text']), entry['lang'])
                 if example.get('roman'):
                     body+="<br><span class='muted'>"+esc(example['roman'])+'</span>'
                 for translation in example.get('translations',[]):
-                    body+='<br><b>'+esc(translation['lang'].upper())+'</b> · '+analysis_text(translation['text'])
+                    body+='<br><b>'+esc(translation['lang'].upper())+'</b> · '+language_html(analysis_text(translation['text']), translation['lang'])
                     if translation.get('url'):
                         credit=translation.get('author') or 'Tatoeba contributors'
                         body+=" <span class='muted'>— <a href='"+esc(translation['url'],quote=True)+"'>"+esc(credit)+'</a></span>'

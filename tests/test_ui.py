@@ -60,6 +60,56 @@ class WindowTests(unittest.TestCase):
             QTest.qWait(10)
         self.fail('Suggestions did not finish')
 
+    def test_regional_fonts_in_entries_translations_results_and_navigation(self):
+        from sanlex.fonts import font_families
+        from sanlex.autocomplete import ROW_ROLE
+        window = self.window
+
+        def assert_text_font(text, language):
+            cursor = window.word_view.document().find(text)
+            self.assertFalse(cursor.isNull(), text)
+            self.assertEqual(cursor.charFormat().fontFamilies()[0], font_families(language)[0])
+
+        # The same Unicode spelling must retain distinct regional font choices.
+        for language in ('cn', 'jp'):
+            window.show_entry(f'fixture:school:{language}')
+            assert_text_font('学校', language)
+            # Cross-language mappings use the target's font, even in this entry.
+            other = 'jp' if language == 'cn' else 'cn'
+            document = window.word_view.document()
+            cursor = document.find('学校', document.find('Across languages'))
+            self.assertFalse(cursor.isNull())
+            self.assertEqual(cursor.charFormat().fontFamilies()[0], font_families(other)[0])
+
+        example = {'text': '先生在学校。', 'source': 'fixture',
+                   'translations': [{'lang': 'jp', 'text': '先生は学校にいる。'}]}
+        with patch('sanlex.ui.dictionary_examples', return_value=([example], [], False)):
+            window.show_entry('fixture:school:cn')
+        assert_text_font('先生在学校。', 'cn')
+        assert_text_font('先生は学校にいる。', 'jp')
+
+        window.set_query('school')
+        self.wait_search()
+
+        def assert_result_fonts():
+            self.assertGreaterEqual(window.results.count(), 2)
+            for i in range(window.results.count()):
+                item = window.results.item(i)
+                entry = window.db.entry(item.data(Qt.ItemDataRole.UserRole)[1])
+                self.assertEqual(item.font().families()[0], font_families(entry['lang'])[0])
+
+        assert_result_fonts()
+        window.set_query('water')
+        self.wait_search()
+        window.go_back()
+        self.app.processEvents()
+        assert_result_fonts()
+        self.type_suggestion('xuex')
+        self.assertGreater(window.autocomplete.model.rowCount(), 0)
+        for i in range(window.autocomplete.model.rowCount()):
+            item = window.autocomplete.model.item(i)
+            self.assertEqual(item.font().families()[0], font_families(item.data(ROW_ROLE)['lang'])[0])
+
     def test_autocomplete_keyboard_selection_is_lightweight_and_opens_selected_entry(self):
         auto=self.window.autocomplete
         before=self.window.current_entry['id']

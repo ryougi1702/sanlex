@@ -72,6 +72,53 @@ class AnalysisTests(unittest.TestCase):
             self.assertIn('𠀀',[char for char,_ in self.window.model.parents(component,mode,limit=10000)[0]])
         self.assertNotIn('𠀀',[char for char,_ in self.window.model.parents('水','ja')[0]])
 
+    def test_simplified_input_resolves_to_attested_japanese_variant(self):
+        with self.db.conn:
+            for char, props in [
+                ('务', {'kTraditionalVariant': 'U+52D9'}),
+                ('務', {'kSimplifiedVariant': 'U+52A1', 'kJapaneseOn': 'MU'}),
+                ('将', {'kTraditionalVariant': 'U+5C07', 'kJapaneseOn': 'SHOU'}),
+                ('军', {'kTraditionalVariant': 'U+8ECD'}),
+            ]:
+                self.db.conn.execute('INSERT INTO characters(char,unihan) VALUES(?,?)',
+                                     (char, json.dumps(props)))
+            self.db.add_entry({'id': 'jmdict:duty', 'lang': 'jp', 'headword': '勤務',
+                               'reading': 'きんむ', 'glosses': ['duty'], 'source': 'jmdict'})
+        model = self.window.model
+        self.assertEqual(model.variants('务', 'ja'), ['務'])
+        self.assertEqual(model.variants('務', 'hans'), ['务'])
+        self.assertEqual(model.variants('務', 'ja'), ['務'])
+        self.assertEqual(model.variants('将', 'ja'), ['将'])
+        self.assertEqual(model.variants('军', 'ja'), ['軍'])
+        self.assertEqual(model.variants('发', 'ja'), ['發', '髮'])
+        self.window.show_character('务', 'hans')
+        self.window.modes.setCurrentIndex(2)
+        self.assertEqual((self.window.root_char, self.window.char, self.window.mode), ('务', '務', 'ja'))
+        self.assertIn('From 务: Japanese form', self.window.variant_note.text())
+        self.assertIn('On readings', self.window.info.toPlainText())
+        self.assertIn('勤務', self.window.words.toPlainText())
+        self.assertTrue(self.window.play.isEnabled())
+        self.window.travel(-1)
+        self.assertEqual((self.window.char, self.window.mode), ('务', 'hans'))
+        self.window.travel(1)
+        self.assertEqual((self.window.char, self.window.mode), ('務', 'ja'))
+
+    def test_japanese_mapping_requires_regional_evidence_not_semantic_similarity(self):
+        with self.db.conn:
+            self.db.conn.execute('INSERT INTO characters(char,unihan) VALUES(?,?)',
+                ('𠀀', json.dumps({'kTraditionalVariant': 'U+20001', 'kSemanticVariant': 'U+52D9'})))
+        self.assertEqual(self.window.model.variants('𠀀', 'ja'), ['𠀀'])
+        # Dictionary readings still resolve the variant without any animation pack.
+        with tempfile.TemporaryDirectory() as directory:
+            store = StrokeStore(Path(directory)/'absent.sqlite3')
+            with self.db.conn:
+                for char, props in [('务', {'kTraditionalVariant': 'U+52D9'}),
+                                    ('務', {'kJapaneseOn': 'MU'})]:
+                    self.db.conn.execute('INSERT INTO characters(char,unihan) VALUES(?,?)',
+                                         (char, json.dumps(props)))
+            self.assertEqual(CharacterAnalysis(self.db, store).variants('务', 'ja'), ['務'])
+            store.close()
+
     def test_chinese_spellings_and_language_and_source_filters(self):
         model = self.window.model
         self.assertEqual({w['lang'] for w in model.words('校','ja')},{'jp'})

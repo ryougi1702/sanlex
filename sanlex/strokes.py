@@ -44,12 +44,27 @@ class CharacterAnalysis:
 
     def variants(self, char, mode):
         if mode == 'ja':
-            return [char]
+            # Shared forms such as 学 and 将 are already Japanese. Do not
+            # replace them with traditional Chinese just because a link exists.
+            if self.has_japanese_data(char):
+                return [char]
+            uni = self.db.character(char)['unihan']
+            candidates = [chr(int(code,16))
+                          for field in ('kTraditionalVariant', 'kSimplifiedVariant')
+                          for code in re.findall(r'U\+([0-9A-Fa-f]+)', uni.get(field, ''))]
+            # Chinese variant links are candidates, not proof of Japanese use.
+            # Keep every attested candidate when the input has multiple meanings.
+            return list(dict.fromkeys(c for c in candidates if self.has_japanese_data(c))) or [char]
         field = 'kSimplifiedVariant' if mode == 'hans' else 'kTraditionalVariant'
         value = self.db.character(char)['unihan'].get(field, '')
         variants = [chr(int(code,16)) for code in re.findall(r'U\+([0-9A-Fa-f]+)',value)]
         # Keep all candidates: simplified-to-traditional conversion can be ambiguous.
         return list(dict.fromkeys(variants)) or [char]
+
+    def has_japanese_data(self, char):
+        data = self.db.character(char)
+        return bool(data['kanjidic'] or data['unihan'].get('kJapaneseOn') or
+                    data['unihan'].get('kJapaneseKun') or self.strokes.record(char, 'ja'))
 
     def structures(self, char, mode):
         record = self.strokes.record(char,mode)

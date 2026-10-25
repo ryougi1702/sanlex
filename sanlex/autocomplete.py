@@ -6,6 +6,7 @@ from PySide6.QtGui import QStandardItem,QStandardItemModel
 from PySide6.QtWidgets import QCompleter
 
 from .db import Dictionary
+from .fonts import entry_font
 
 ROW_ROLE=Qt.ItemDataRole.UserRole+1
 
@@ -142,6 +143,7 @@ class Autocomplete(QObject):
             if row['gloss']:
                 title+='  — '+row['gloss']
             item=QStandardItem(title)
+            item.setFont(entry_font(row['lang'], self.completer.popup().font()))
             item.setEditable(False)
             item.setData(row,ROW_ROLE)
             item.setToolTip(f"{row['headword']} · {row['source']}\n{row['gloss']}")

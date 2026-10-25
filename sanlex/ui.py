@@ -409,6 +409,8 @@ class MainWindow(QMainWindow):
         self.generation = 0
         self.result_limit = 80
         self._completion_target = None
+        self._result_query = None
+        self._recent_search_generation = None
         self.workers = []
         self.data_dialog = None
         self.analysis_window = None
@@ -525,6 +527,7 @@ class MainWindow(QMainWindow):
         self.results.setAccessibleName("Dictionary results")
         self.results.currentItemChanged.connect(self.select_result)
         self.results.itemClicked.connect(self.activate_result)
+        self.results.itemActivated.connect(self.activate_result)
         left_layout.addWidget(self.results)
         self.more_button = button('Show more results', self.load_more_results)
         self.more_button.hide()
@@ -652,6 +655,7 @@ class MainWindow(QMainWindow):
             'word_scroll': self.word_view.verticalScrollBar().value(),
             'char_scroll': self.char_view.verticalScrollBar().value(),
             'query': self.search_input.text(), 'language': self.language.currentIndex(), 'mode': self.mode,
+            'result_query': self._result_query,
             'sources': self.filter_panel.selected_sources(), 'directions': self.filter_panel.selected_directions(),
             'corpus':self.filter_panel.corpus_check.isChecked(), 'example_limit':self.example_limit,
             'filters_visible': not self.filter_dock.isHidden(),
@@ -738,6 +742,7 @@ class MainWindow(QMainWindow):
             self.example_limit=page.get('example_limit',4)
             self.filter_dock.setVisible(page['filters_visible'])
             self.mode = page['mode']
+            self._result_query = page.get('result_query')
             for key, nav in self.nav.items():
                 nav.setChecked(key == self.mode)
             self.results.clear()
@@ -813,6 +818,28 @@ class MainWindow(QMainWindow):
         self.set_detail_tab(0)
         self.search_now(preserve_character=True,completion_id=row['id'])
 
+    def open_recent_search(self, query):
+        entry_id = self.db.history_entry(query)
+        entry = self.db.entry(entry_id) if entry_id else None
+        filters = self.filter_kwargs()
+        if entry and ((filters['sources'] is not None and entry['source'] not in filters['sources']) or
+                      (filters['directions'] is not None and
+                       (entry['lang'], entry['definition_lang']) not in filters['directions']) or
+                      self.language.currentData() not in ('all', entry['lang'])):
+            entry_id = None
+        # A recent search is a new lookup, independent of any explorer page or
+        # unfinished search that happened to be visible when it was selected.
+        self.search_input.setText(query)
+        self.set_detail_tab(0)
+        self.current_entry = None
+        self.save_button.setEnabled(False)
+        self.update_save_label()
+        self.word_view.setHtml(html(f'<h2>Looking up {esc(query)}…</h2>'))
+        self.search_now(preserve_character=True, completion_id=entry_id)
+        self._recent_search_generation = self.generation
+        if len(query) == 1 and is_han(query):
+            self.show_character(query, activate=False)
+
     def search_now(self, checked=False, record=True, expanding=False, preserve_character=False,completion_id=None):
         self.autocomplete.dismiss()
         self.timer.stop()
@@ -827,6 +854,7 @@ class MainWindow(QMainWindow):
         for key, nav in self.nav.items():
             nav.setChecked(key == "dictionary")
         self.generation += 1
+        self._recent_search_generation = None
         self._completion_target=(self.generation,completion_id) if completion_id else None
         if not query:
             self.results.clear()
@@ -857,6 +885,8 @@ class MainWindow(QMainWindow):
     def receive_search(self, generation, results):
         if generation != self.generation:
             return
+        query = self.search_input.text().strip()
+        self._result_query = query
         self.more_button.setVisible(len(results) > self.result_limit)
         results = results[:self.result_limit]
         selected_id=None
@@ -867,12 +897,15 @@ class MainWindow(QMainWindow):
                 results=[selected,*results[:max(0,self.result_limit-1)]]
         self._completion_target=None
         self.fill_results(results,selected_id)
+        self.db.remember_search_entry(query, self.current_entry['id'] if results and self.current_entry else None)
         count = len(results)
         self.result_label.setText(f"{count} results shown   /   {self.search_input.text().strip()}")
         if not results:
             self.word_view.setHtml(html("<h2>No matching words.</h2><p>Try another word or use <b>Reset all filters</b> in the Filters panel. Dictionary, direction and language filters apply together.</p><p>The character explorer remains available. Use <b>Dictionaries & sources</b> to install additional dictionaries.</p>"))
             self.current_entry = None
             self.save_button.setEnabled(False)
+            if self._recent_search_generation == generation and len(query) == 1 and is_han(query):
+                self.show_character(query)
         self.record_navigation_page()
 
     def load_more_results(self):
@@ -904,12 +937,16 @@ class MainWindow(QMainWindow):
             return
         kind, value = item.data(Qt.ItemDataRole.UserRole)
         if kind == "query":
-            self.set_query(value)
+            self.open_recent_search(value)
         else:
             self.show_entry(value, activate=not self._filling_results)
 
     def activate_result(self, item):
+        if not item:
+            return
         kind, value = item.data(Qt.ItemDataRole.UserRole)
+        if kind == 'query' and self.mode == 'history':
+            self.open_recent_search(value)
         if kind == 'entry' and (self.tabs.currentIndex() != 0 or not self.current_entry or self.current_entry['id'] != value):
             self.show_entry(value)
 
@@ -996,6 +1033,11 @@ class MainWindow(QMainWindow):
             self.set_detail_tab(0)
         if visible:
             self.record_navigation_page()
+        if not self._restoring_navigation and not self._filling_results and self.mode == 'dictionary' and self._result_query:
+            if self._result_query in (entry['headword'], entry['reading'], *entry['forms']) or any(
+                    self.results.item(i).data(Qt.ItemDataRole.UserRole) == ('entry', entry_id)
+                    for i in range(self.results.count())):
+                self.db.remember_search_entry(self._result_query, entry_id)
 
     def explore_input(self):
         char = self.char_input.text().strip()
@@ -1308,6 +1350,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Cancelling dictionary installation safely. Close again when it finishes.")
             event.ignore()
             return
+        self.timer.stop()
+        self.generation += 1  # Reject queued results before closing the databases.
         for worker in self.workers:
             worker.requestInterruption()
             worker.wait()

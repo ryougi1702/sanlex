@@ -85,8 +85,10 @@ class Dictionary:
             self.user = sqlite3.connect(str(self.path.with_name('user.sqlite3')), timeout=5)
             self.user.execute('PRAGMA journal_mode=WAL')
             self.user.executescript('''CREATE TABLE IF NOT EXISTS favorites(entry_id TEXT PRIMARY KEY, added TEXT DEFAULT CURRENT_TIMESTAMP);
-                CREATE TABLE IF NOT EXISTS history(query TEXT PRIMARY KEY,searched TEXT DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS history(query TEXT PRIMARY KEY,searched TEXT DEFAULT CURRENT_TIMESTAMP,entry_id TEXT);
                 CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);''')
+            if 'entry_id' not in {row[1] for row in self.user.execute('PRAGMA table_info(history)')}:
+                self.user.execute('ALTER TABLE history ADD COLUMN entry_id TEXT')
         return self.user
 
     def preference(self, key: str, default=None):
@@ -401,11 +403,24 @@ class Dictionary:
     def record_search(self, query: str):
         user = self.user_connection()
         with user:
-            user.execute("INSERT OR REPLACE INTO history(query) VALUES(?)", (query,))
-            user.execute("DELETE FROM history WHERE query NOT IN (SELECT query FROM history ORDER BY searched DESC LIMIT 100)")
+            user.execute("INSERT OR REPLACE INTO history(query,searched,entry_id) "
+                         "VALUES(?,strftime('%Y-%m-%d %H:%M:%f','now'),"
+                         "(SELECT entry_id FROM history WHERE query=?))", (query, query))
+            user.execute("DELETE FROM history WHERE query NOT IN (SELECT query FROM history ORDER BY searched DESC,rowid DESC LIMIT 100)")
 
     def history(self) -> list[str]:
-        return [r[0] for r in self.user_connection().execute("SELECT query FROM history ORDER BY searched DESC")]
+        return [r[0] for r in self.user_connection().execute("SELECT query FROM history ORDER BY searched DESC,rowid DESC")]
+
+    def history_entry(self, query: str):
+        row = self.user_connection().execute('SELECT entry_id FROM history WHERE query=?', (query,)).fetchone()
+        return row[0] if row else None
+
+    def remember_search_entry(self, query: str, entry_id):
+        # Update only submitted queries; browsing a saved word or editing the
+        # search box must not create a new search-history association.
+        user = self.user_connection()
+        with user:
+            user.execute('UPDATE history SET entry_id=? WHERE query=?', (entry_id, query))
 
     def counts(self) -> dict:
         result = {r[0]: r[1] for r in self.conn.execute("SELECT lang,count(*) FROM entries GROUP BY lang")}

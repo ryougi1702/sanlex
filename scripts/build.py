@@ -14,6 +14,7 @@ os.chdir(ROOT)
 parser = argparse.ArgumentParser()
 parser.add_argument('--database', type=Path)
 parser.add_argument('--dist-dir', type=Path, default=Path('dist'), help='Output root; choose a separate folder while an existing app is running')
+parser.add_argument('--work-dir', type=Path, help='Separate PyInstaller work folder when the existing build is running')
 parser.add_argument('--reuse-snapshot', action='store_true', help='Reuse the existing compact snapshot after UI-only changes')
 args = parser.parse_args()
 
@@ -24,6 +25,8 @@ make_icon(assets / 'icon.ico')
 
 command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed',
            '--name', 'SanLex', '--icon', str(assets / 'icon.ico'), '--distpath', str(args.dist_dir.resolve())]
+if args.work_dir:
+    command += ['--workpath', str(args.work_dir.resolve())]
 for source, destination in [('assets','assets'), ('licenses','licenses'),
                             ('THIRD_PARTY_NOTICES.md','.'), ('README.md','.'), ('LICENSE','.'),
                             ('sanlex','source/sanlex'), ('scripts','source/scripts'),

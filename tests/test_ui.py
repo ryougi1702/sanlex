@@ -268,6 +268,98 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.results.count(), 0)
         self.assertFalse(self.window.save_button.isEnabled())
 
+    def test_recent_character_reruns_query_and_reopens_chosen_entry(self):
+        window = self.window
+        with window.db.conn:
+            for char, language, suffix in [('裴', 'jp', 'jp'), ('裴', 'cn', 'cn'), ('将', 'jp', 'jiang')]:
+                window.db.add_entry({'id': 'fixture:pei:' + suffix, 'headword': char, 'lang': language,
+                                     'reading': '', 'glosses': ['test surname'], 'source': 'fixture'})
+        window.refresh_library()
+        window.set_query('裴')
+        self.wait_search()
+        window.show_entry('fixture:pei:cn')
+        self.assertEqual(window.db.history_entry('裴'), 'fixture:pei:cn')
+        # Full source-entry links may open another sense not in the current
+        # result list. Remember it when it is a spelling of the same query.
+        with window.db.conn:
+            window.db.add_entry({'id': 'fixture:pei:source', 'headword': '裴', 'lang': 'cn',
+                                 'reading': '', 'glosses': ['another surname entry'], 'source': 'fixture'})
+        window.show_entry('fixture:pei:source')
+        self.assertEqual(window.db.history_entry('裴'), 'fixture:pei:source')
+        window.set_query('将')
+        self.wait_search()
+        stale = window.generation
+        old_results = window.db.search('将')
+        window.show_character('裴')
+        self.assertEqual(window.search_input.text(), '将')
+        window.show_history()
+        item = next(window.results.item(i) for i in range(window.results.count()) if window.results.item(i).text() == '裴')
+        QTest.mouseClick(window.results.viewport(), Qt.MouseButton.LeftButton,
+                         pos=window.results.visualItemRect(item).center())
+        self.assertEqual(window.search_input.text(), '裴')
+        self.assertIsNone(window.current_entry)
+        window.receive_search(stale, old_results)
+        self.wait_search()
+        self.assertEqual(window.current_entry['id'], 'fixture:pei:source')
+        self.assertEqual(window.tabs.currentIndex(), 0)
+        self.assertEqual(window.current_char, '裴')
+        self.assertEqual(window.results.currentItem().data(Qt.ItemDataRole.UserRole), ('entry', 'fixture:pei:source'))
+        self.assertEqual(window.db.history_entry('将'), 'fixture:pei:jiang')
+
+    def test_recent_character_without_entry_shows_that_character(self):
+        window = self.window
+        window.db.record_search('裴')
+        window.set_query('water')
+        self.wait_search()
+        window.show_character('梯')
+        window.open_recent_search('裴')
+        self.wait_search()
+        self.assertEqual(window.search_input.text(), '裴')
+        self.assertEqual(window.current_char, '裴')
+        self.assertIsNone(window.current_entry)
+        self.assertEqual(window.results.count(), 0)
+        self.assertEqual(window.tabs.currentIndex(), 1)
+        self.assertIn('裴', window.char_view.toPlainText())
+
+    def test_recent_search_respects_filters_and_missing_entry_falls_back(self):
+        window = self.window
+        window.db.record_search('学校')
+        window.db.remember_search_entry('学校', 'fixture:school:cn')
+        window.language.setCurrentIndex(1)
+        self.wait_search()
+        window.open_recent_search('学校')
+        self.wait_search()
+        self.assertEqual(window.current_entry['id'], 'fixture:school:jp')
+        self.assertEqual(window.tabs.currentIndex(), 0)
+        window.db.remember_search_entry('学校', 'entry:removed')
+        window.open_recent_search('学校')
+        self.wait_search()
+        self.assertEqual(window.current_entry['id'], 'fixture:school:jp')
+
+    def test_recent_search_keeps_entry_beyond_first_page_and_ignores_unsubmitted_text(self):
+        window = self.window
+        with window.db.conn:
+            for i in range(90):
+                window.db.add_entry({'id': f'fixture:recent:{i}', 'headword': f'recentprobe{i:03}',
+                                     'reading': '', 'lang': 'jp', 'glosses': ['recentprobe'], 'source': 'fixture'})
+        window.refresh_library()
+        window.set_query('recentprobe')
+        self.wait_search()
+        window.load_more_results()
+        self.wait_search()
+        selected = 'fixture:recent:89'
+        window.search_input.setText('裴')
+        window.show_entry(selected)
+        self.assertEqual(window.db.history_entry('recentprobe'), selected)
+        self.assertNotIn('裴', window.db.history())
+        window.set_query('cat')
+        self.wait_search()
+        window.open_recent_search('recentprobe')
+        self.wait_search()
+        self.assertEqual(window.search_input.text(), 'recentprobe')
+        self.assertEqual(window.current_entry['id'], selected)
+        self.assertEqual(window.tabs.currentIndex(), 0)
+
     def test_sources_dialog_and_minimum_size(self):
         self.window.resize(1020, 690)
         self.window.open_data()

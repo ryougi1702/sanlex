@@ -1,5 +1,6 @@
 import gzip
 import json
+import sqlite3
 from pathlib import Path
 import tempfile
 import threading
@@ -201,6 +202,37 @@ class DictionaryTests(unittest.TestCase):
         finally:
             writer.conn.rollback()
             writer.close()
+
+    def test_recent_entry_persists_and_queries_have_deterministic_order(self):
+        self.db.record_search('water')
+        self.db.remember_search_entry('water', 'fixture:water:cn')
+        self.db.record_search('cat')
+        self.db.record_search('water')
+        self.assertEqual(self.db.history()[:2], ['water', 'cat'])
+        other = Dictionary(self.db.path)
+        try:
+            self.assertEqual(other.history_entry('water'), 'fixture:water:cn')
+            self.assertIsNone(other.history_entry('cat'))
+            self.assertIsNone(other.history_entry('unknown'))
+            other.remember_search_entry('not submitted', 'fixture:water:cn')
+            self.assertNotIn('not submitted', other.history())
+        finally:
+            other.close()
+
+    def test_legacy_recent_searches_migrate_without_losing_saves(self):
+        path = self.db.path.with_name('user.sqlite3')
+        with sqlite3.connect(path) as legacy:
+            legacy.executescript('CREATE TABLE history(query TEXT PRIMARY KEY,searched TEXT DEFAULT CURRENT_TIMESTAMP);'
+                                 'CREATE TABLE favorites(entry_id TEXT PRIMARY KEY,added TEXT DEFAULT CURRENT_TIMESTAMP);')
+            legacy.execute('INSERT INTO history(query) VALUES(?)', ('裴',))
+            legacy.execute('INSERT INTO favorites(entry_id) VALUES(?)', ('fixture:water:jp',))
+        legacy.close()
+        self.assertEqual(self.db.history(), ['裴'])
+        self.assertIsNone(self.db.history_entry('裴'))
+        self.assertTrue(self.db.is_favorite('fixture:water:jp'))
+        self.db.record_search('裴')
+        self.db.remember_search_entry('裴', 'test:pei')
+        self.assertEqual(self.db.history_entry('裴'), 'test:pei')
 
     def test_fts_special_input_is_literal(self):
         for query in ('" OR *', 'school" OR "cat', "'; DROP TABLE entries;--", '()', '水*', '𠮷'):

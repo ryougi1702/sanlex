@@ -142,6 +142,58 @@ class WindowTests(unittest.TestCase):
         self.assertIn('梯', self.window.char_view.toPlainText())
         self.assertIn('Part of', self.window.char_view.toPlainText())
 
+    def test_handwriting_recognition_lookup_insertion_modes_and_lifecycle(self):
+        from sanlex.strokes import StrokeStore
+        from sanlex.handwriting import resample
+        QTest.mouseClick(self.window.handwriting_button, Qt.MouseButton.LeftButton)
+        pad = self.window.handwriting_window
+        self.assertTrue(pad.isVisible())
+        self.assertFalse(pad.lookup_button.isEnabled())
+        store = StrokeStore()
+        medians = store.record('木', 'ja')['graphics']['medians']
+        store.close()
+        rect = pad.canvas.drawing_rect()
+        # Draw via real mouse events to exercise canvas -> worker -> candidates.
+        for stroke in medians:
+            points = [QPoint(round(rect.x() + x / 1024 * rect.width()),
+                             round(rect.y() + (900-y) / 1024 * rect.height()))
+                      for x, y in resample(stroke, 12)]
+            QTest.mousePress(pad.canvas, Qt.MouseButton.LeftButton, pos=points[0])
+            for point in points[1:-1]:
+                QTest.mouseMove(pad.canvas, point)
+            QTest.mouseRelease(pad.canvas, Qt.MouseButton.LeftButton, pos=points[-1])
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not pad.candidates.count():
+            self.app.processEvents()
+            QTest.qWait(20)
+        matches = [pad.candidates.item(i).text() for i in range(pad.candidates.count())]
+        self.assertIn('木', matches[:5])
+        pad.candidates.setCurrentRow(matches.index('木'))
+        self.assertTrue(pad.lookup_button.isEnabled())
+        QTest.mouseClick(pad.lookup_button, Qt.MouseButton.LeftButton)
+        self.wait_search()
+        self.assertEqual(self.window.search_input.text(), '木')
+        self.assertEqual(self.window.analysis_window.root_char, '木')
+        self.assertTrue(self.window.analysis_window.isVisible())
+        self.window.search_input.setText('学校')
+        self.window.search_input.setSelection(1, 1)
+        QTest.mouseClick(pad.insert_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(self.window.search_input.text(), '学木')
+        self.assertEqual(pad.canvas.strokes, [])
+        self.assertEqual(pad.candidates.count(), 0)
+        stale = pad.generation - 1
+        pad.receive(stale, [{'char':'水','mode':'ja','distance':0}])
+        self.assertEqual(pad.candidates.count(), 0)
+        pad.mode.setCurrentIndex(pad.mode.findData('hant'))
+        self.assertEqual(self.window.db.preference('handwriting-mode'), 'hant')
+        self.assertIn('smaller', pad.coverage.text())
+        pad.close()
+        self.assertFalse(pad.timer.isActive())
+        self.window.open_handwriting()
+        self.assertIs(self.window.handwriting_window, pad)
+        self.window.close()
+        self.assertFalse(pad.worker.isRunning())
+
     def test_save_history_and_stale_search(self):
         self.window.save_current()
         self.window.show_saved()

@@ -48,6 +48,8 @@ The `graphics*.txt` stroke outlines and medians, and their compressed records in
 
 SanLex converts the original records into a compressed SQLite container and indexes component leaves from their decompositions. The original text files are included unmodified in `assets/strokes/originals/`; revision, SHA-256 hashes, modification date and changes are recorded in `assets/strokes/manifest.json` and the SQLite `provenance` table. The build script is `scripts/install_strokes.py`. The native Qt renderer reads those paths, flips their coordinate system for display, and progressively reveals strokes along their medians. Stroke data is bundled for offline use and updated with the application.
 
+The derived `assets/strokes/handwriting.json.zlib` index contains normalized, resampled stroke medians and shape features for offline handwriting matching, under the same **Arphic Public License** as its source medians. Its embedded metadata records the source SQLite file's SHA-256 digest. Regenerate it with `scripts/build_handwriting.py`; the transformation is implemented in `sanlex/handwriting.py`. No external recognizer code or trained model is bundled. Matching is approximate and does not establish a character's language or guarantee handwriting accuracy.
+
 Coverage is 7,336 Japanese, 8,244 Simplified Chinese and 1,513 Traditional Chinese glyphs, including components. Traditional Chinese coverage is incomplete and represents Taiwan conventions; it does not claim to cover every traditional-writing region. Missing regional animations are explicitly identified, with a labelled font preview. No animation from another regional set is silently substituted. IDS fallback relationships are labelled as regional or shared / unspecified.
 
 ## Runtime dependencies

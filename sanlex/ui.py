@@ -21,6 +21,7 @@ from .filters import FilterPanel
 from .analysis_window import AnalysisWindow
 from .examples import corpus_examples, dictionary_examples
 from .autocomplete import Autocomplete
+from .handwriting_window import HandwritingWindow
 from .importers import Cancelled, SOURCES, download, install_source
 from .text import IDS_LABELS, is_han, parse_ids, radical_label
 
@@ -405,6 +406,7 @@ class MainWindow(QMainWindow):
         self.workers = []
         self.data_dialog = None
         self.analysis_window = None
+        self.handwriting_window = None
         self.mode = "dictionary"
         self._navigation_history = []
         self._navigation_index = -1
@@ -487,6 +489,9 @@ class MainWindow(QMainWindow):
         for query in ("学校", "younger brother", "梯", "木", "dictionary"):
             examples.addWidget(button(query, lambda checked=False, q=query: self.set_query(q), "example"))
         examples.addStretch()
+        self.handwriting_button = button('✎  Handwriting', self.open_handwriting)
+        self.handwriting_button.setToolTip('Draw an unfamiliar character to look it up (Ctrl+H)')
+        examples.addWidget(self.handwriting_button)
         layout.addLayout(examples)
         self.result_label = label("", "count")
         self.result_label.setWordWrap(True)
@@ -587,6 +592,10 @@ class MainWindow(QMainWindow):
         search_action.setShortcut(QKeySequence("Ctrl+L"))
         search_action.triggered.connect(lambda: (self.search_input.setFocus(), self.search_input.selectAll()))
         self.addAction(search_action)
+        handwriting_action = QAction(self)
+        handwriting_action.setShortcut(QKeySequence('Ctrl+H'))
+        handwriting_action.triggered.connect(self.open_handwriting)
+        self.addAction(handwriting_action)
         for sequence, callback in (('Alt+Left', self.go_back), ('Alt+Right', self.go_forward)):
             action = QAction(self)
             action.setShortcut(QKeySequence(sequence))
@@ -1163,6 +1172,25 @@ class MainWindow(QMainWindow):
             body+='<p>'+link('examplesmore',entry['id'],'Show more examples')+'</p>'
         return body
 
+    def open_handwriting(self):
+        self.autocomplete.dismiss()
+        if self.handwriting_window is None:
+            self.handwriting_window = HandwritingWindow(self.db, self)
+            self.handwriting_window.lookup_requested.connect(self.lookup_handwriting)
+            self.handwriting_window.insert_requested.connect(self.insert_handwriting)
+        self.handwriting_window.show()
+        self.handwriting_window.raise_()
+        self.handwriting_window.activateWindow()
+
+    def lookup_handwriting(self, char, mode):
+        self.set_query(char)
+        self.open_character_analysis(char, mode)
+
+    def insert_handwriting(self, char):
+        self.search_input.insert(char)
+        self.search_input.setFocus()
+        self.statusBar().showMessage('Character inserted · write another or press Search to look up the word')
+
     def open_character_analysis(self, char, mode=None):
         if not is_han(char):
             return
@@ -1272,6 +1300,8 @@ class MainWindow(QMainWindow):
             worker.requestInterruption()
             worker.wait()
         self.autocomplete.shutdown()
+        if self.handwriting_window:
+            self.handwriting_window.shutdown()
         if self.analysis_window:
             self.analysis_window.shutdown()
         self.db.close()

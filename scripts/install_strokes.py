@@ -80,6 +80,8 @@ def main():
         conn.execute('INSERT OR REPLACE INTO provenance VALUES(?,?)',('license','Arphic Public License (graphics); LGPL-3.0-or-later (dictionary metadata). Copyright 2016–2026 FM&SH. Derived from Arphic and Make Me a Hanzi. No warranty. See bundled licences and original files.'))
     assert conn.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
     conn.close()
+    from sanlex.handwriting import build_index
+    build_index(target / 'characters.sqlite3', target / 'handwriting.json.zlib')
     (target / 'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
     for name, filename in [('licenses/COPYING.txt','AnimCJK-COPYING.txt'),
                             ('licenses/APL/english/ARPHICPL.TXT','AnimCJK-Arphic-Public-License.txt')]:

@@ -6,6 +6,8 @@ A Windows desktop dictionary for Japanese, English and Chinese, built with Pytho
 
 Open **`dist/SanLex/SanLex.exe`**. Keep the whole `SanLex` folder together: the executable depends on its `_internal` folder. The full build includes an offline dictionary snapshot. On first launch, SanLex copies that snapshot to `%LOCALAPPDATA%\SanLex\dictionary.sqlite3`; this can take a few seconds. Bookmarks and history live separately in `user.sqlite3`, and survive dictionary updates. The application is a portable folder, not an installer, and the executable is unsigned.
 
+Windows builds isolate DLL discovery from other programs on `PATH` and then launch the actual packaged executable against a temporary empty database to check that Qt loads and renders a window. A failed launch makes the build fail. Run this check separately with `.venv\Scripts\python.exe scripts\smoke_build.py dist\SanLex\SanLex.exe`.
+
 For development, double-click `Start SanLex.cmd`, or run:
 
 ```powershell
@@ -46,6 +48,16 @@ The bundled **Tatoeba** corpus contains **613,083 sentences**: 248,939 Japanese,
 The **Tatoeba example sentences** checkbox in Search filters controls corpus examples separately from word dictionaries; its state is remembered and restored by Back / Forward. Direction filters restrict the languages of corpus translations. **Dictionaries & sources** shows corpus installation status and cached source files. Download / update Tatoeba manually there, or import `tatoeba-manifest.json` with its adjacent `tatoeba/` folder containing all six listed `.bz2` exports. Updates are transactional and preserve the previous corpus on failure or cancellation. Searching and viewing examples uses local data exclusively.
 
 ## Character analysis and animated strokes
+
+### Handwriting lookup
+
+Click **✎ Handwriting** beside the example searches, or press **Ctrl+H**, when you know what a kanji / hanzi looks like but cannot type it. Draw one character with the mouse, pen or touch, lifting between strokes. Possible matches update after a short pause. **Undo stroke** removes the last stroke and **Clear** starts again. Select a match and choose **Look up character**, or double-click it, to search and open its character analysis. **Insert into search** inserts at the search cursor (replacing selected text) and clears the pad so you can build a word one character at a time; press **Search** when ready.
+
+**All scripts** matches the combined Simplified Chinese, Traditional Chinese and Japanese kanji datasets and shows each codepoint once. Separate script modes restrict matching to that regional set; the selected mode is remembered. These modes control handwriting candidates independently of dictionary search filters. Candidate tooltips name the matching template's region; a shared character does not uniquely identify a language. The combined pack covers **10,870 distinct characters**, including components. Simplified mode has 8,244 templates, Japanese 7,336 and Traditional 1,513; use All scripts if a character is missing in a narrower mode. Kana recognition is not included in this pack.
+
+Recognition is an approximate shape match against the bundled AnimCJK stroke medians, not a trained handwriting model. Write clearly and use usual stroke order where possible; cursive, unusual proportions, merged strokes and missing templates can prevent a good match. Suggestions are not confidence guarantees. Everything runs locally in a background thread, without network access, new language packs, accounts or API keys. The derived acceleration index is bundled in `assets/strokes/handwriting.json.zlib`; regenerate it with `.venv\Scripts\python.exe scripts\build_handwriting.py` after editing stroke data. `scripts/install_strokes.py` also rebuilds it when refreshing the pack.
+
+### Character analysis
 
 Click an individual kanji or hanzi in the large entry heading, other spellings, definitions or examples to open its analysis directly. You can also use **Inside the word**, the large character in the atlas, or **Character explorer → Stroke analysis ↗**. The resizable character window stays open while you browse the dictionary. **Simplified Chinese**, **Traditional Chinese**, and **Japanese** tabs select separate regional stroke and component data. Chinese tabs offer recorded Unicode simplified/traditional forms; when several forms are possible, use **Character form** to choose. Japanese keeps the selected codepoint, rather than assuming every traditional character has an interchangeable Japanese form.
 

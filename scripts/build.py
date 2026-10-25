@@ -46,7 +46,19 @@ if args.database:
         (snapshot_dir / 'sources.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     command += ['--add-data', f'{snapshot_dir}{os.pathsep}bundled-data']
 command += ['run.py']
-subprocess.run(command, check=True)
+build_env = os.environ.copy()
+if sys.platform == 'win32':
+    # Dependency discovery also searches PATH. Other installed tools can ship
+    # identically named, ABI-incompatible DLLs (notably Poppler's icuuc.dll).
+    # Qt uses the Windows ICU API; let it resolve against Windows itself.
+    windows = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+    build_env['PATH'] = os.pathsep.join(map(str, (
+        Path(sys.executable).parent, Path(sys.base_prefix), windows / 'System32', windows)))
+    for variable in ('QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH', 'QML2_IMPORT_PATH'):
+        build_env.pop(variable, None)
+subprocess.run(command, check=True, env=build_env)
 for name in ('README.md', 'THIRD_PARTY_NOTICES.md', 'LICENSE'):
     shutil.copy2(ROOT / name, args.dist_dir / 'SanLex' / name)
+subprocess.run([sys.executable, str(ROOT / 'scripts' / 'smoke_build.py'),
+                str(args.dist_dir / 'SanLex' / 'SanLex.exe')], check=True)
 print(f'Ready: {args.dist_dir.resolve() / "SanLex/SanLex.exe"}')

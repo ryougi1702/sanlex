@@ -5,7 +5,7 @@ a = Analysis(
     ['run.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('licenses', 'licenses'), ('THIRD_PARTY_NOTICES.md', '.'), ('README.md', '.'), ('LICENSE', '.'), ('sanlex', 'source/sanlex'), ('scripts', 'source/scripts'), ('requirements.txt', 'source'), ('requirements-dev.txt', 'source'), ('run.py', 'source'), ('assets', 'source/assets'), ('licenses', 'source/licenses'), ('tests', 'source/tests'), ('THIRD_PARTY_NOTICES.md', 'source'), ('README.md', 'source'), ('LICENSE', 'source'), ('C:\\workspace\\ThreeKingdoms\\build\\bundled-data', 'bundled-data')],
+    datas=[('assets', 'assets'), ('licenses', 'licenses'), ('THIRD_PARTY_NOTICES.md', '.'), ('README.md', '.'), ('LICENSE', '.'), ('sanlex', 'source/sanlex'), ('scripts', 'source/scripts'), ('requirements.txt', 'source'), ('requirements-dev.txt', 'source'), ('run.py', 'source'), ('assets', 'source/assets'), ('licenses', 'source/licenses'), ('tests', 'source/tests'), ('THIRD_PARTY_NOTICES.md', 'source'), ('README.md', 'source'), ('LICENSE', 'source'), ('build/bundled-data', 'bundled-data')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\workspace\\ThreeKingdoms\\assets\\icon.ico'],
+    icon=['assets/icon.ico'],
 )
 coll = COLLECT(
     exe,

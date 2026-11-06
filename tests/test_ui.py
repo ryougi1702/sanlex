@@ -171,6 +171,40 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.search_input.text(),'school')
         self.assertGreater(self.window.results.count(),0)
 
+    def test_conjugation_explanation_survives_navigation_recent_search_and_examples(self):
+        window = self.window
+        with window.db.conn:
+            window.db.add_entry({'id': 'fixture:conjugation:jp', 'headword': '食べる', 'reading': 'たべる',
+                                 'lang': 'jp', 'source': 'fixture', 'glosses': ['to eat'],
+                                 'senses': [{'pos': ['Ichidan verb'], 'glosses': ['to eat']}]})
+        with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected network lookup')):
+            window.set_query('食べなかった')
+            self.wait_search()
+            self.assertEqual(window.current_entry['headword'], '食べる')
+            self.assertIn('Possible conjugation', window.word_view.toPlainText())
+            self.assertIn('食べなかった → 食べない → 食べる', window.word_view.toPlainText())
+            self.assertIn('negative → past', window.word_view.toPlainText())
+            self.assertIn('食べなかった', window.results.item(0).toolTip())
+            window.handle_link(QUrl('examplesmore:fixture:conjugation:jp'))
+            self.assertIn('Possible conjugation', window.word_view.toPlainText())
+            window.set_query('学校')
+            self.wait_search()
+            self.assertNotIn('Possible conjugation', window.word_view.toPlainText())
+            window.go_back()
+            self.assertEqual(window.current_entry['headword'], '食べる')
+            self.assertIn('Possible conjugation', window.word_view.toPlainText())
+            window.show_entry('fixture:conjugation:jp')
+            self.assertIn('negative → past', window.word_view.toPlainText())
+            window.open_recent_search('食べなかった')
+            self.wait_search()
+            self.assertIn('Possible conjugation', window.word_view.toPlainText())
+            window.set_query('食べる')
+            self.wait_search()
+            self.assertNotIn('Possible conjugation', window.word_view.toPlainText())
+            window.db.toggle_favorite('fixture:conjugation:jp')
+            window.show_saved()
+            self.assertNotIn('Possible conjugation', window.word_view.toPlainText())
+
     def test_initial_search_and_character_link(self):
         self.assertNotIn('starter', self.window.filter_panel.source_checks)
         self.assertEqual(self.window.search_input.text(), '学校')

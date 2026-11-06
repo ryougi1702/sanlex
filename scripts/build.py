@@ -24,7 +24,7 @@ assets = ROOT / 'assets'
 make_icon(assets / 'icon.ico')
 
 command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed',
-           '--name', 'SanLex', '--icon', str(assets / 'icon.ico'), '--distpath', str(args.dist_dir.resolve())]
+           '--name', 'SanLex', '--icon', 'assets/icon.ico', '--distpath', str(args.dist_dir.resolve())]
 if args.work_dir:
     command += ['--workpath', str(args.work_dir.resolve())]
 for source, destination in [('assets','assets'), ('licenses','licenses'),
@@ -47,7 +47,7 @@ if args.database:
         manifest = {row[0]: json.loads(row[1]) for row in source.execute('SELECT * FROM sources')}
         source.close()
         (snapshot_dir / 'sources.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
-    command += ['--add-data', f'{snapshot_dir}{os.pathsep}bundled-data']
+    command += ['--add-data', f'build/bundled-data{os.pathsep}bundled-data']
 command += ['run.py']
 build_env = os.environ.copy()
 if sys.platform == 'win32':

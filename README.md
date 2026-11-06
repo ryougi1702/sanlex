@@ -39,6 +39,16 @@ Internet access happens when you explicitly request a download / update, or foll
 - Broad searches have a **Show more results** button. Character parent lists and containing-word lists also have controls to reveal more matches.
 - Use **← Back** / **Forward →**, or **Alt+Left** / **Alt+Right**, to retrace entry links, translations and character details. Navigation restores your scroll position, search results, language filter and character options. Opening a new page after going Back replaces the Forward path. Navigation history is kept for the current app session.
 
+## Japanese conjugation lookup
+
+Enter an inflected Japanese word and press **Enter** or **Search** to find its dictionary form. For example, `食べました` finds `食べる`, `書かなかった` finds `書く`, and `勉強しました` finds the suru-verb entry `勉強`. Kana readings work too, including katakana input such as `タベマシタ`.
+
+Supported forms include polite and plain past / negative, te-form, conditionals (ば / たら), volitional, imperative, たい, potential, passive, causative, progressive / continuing-state ている (including contracted てる), and common combinations. Ichidan and godan verbs, irregular する / 来る / 行く / ある, suru nouns, and i- / na-adjectives are checked against installed part-of-speech data. Exact matches come first; conjugation matches precede broad meaning and prefix results. Dictionary, translation-direction and language filters still apply. Chinese and English entries are never deinflected.
+
+The entry shows **Possible conjugation**, the steps from your input to the matched form, and grammatical labels. For example, `食べなかった → 食べない → 食べる` is labelled `negative → past`. This explanation also appears in the result tooltip and is restored by Back / Forward and recent searches. A form can have several interpretations (for example, potential / passive); this is a rule-based lookup aid, not a sentence parser or a guarantee of meaning. Sources without usable part-of-speech labels cannot provide conjugation matches, and broad Wiktionary labels can leave the verb class ambiguous. Romaji conjugations, dialectal / classical endings, and full-sentence segmentation are not supported. Suggestions while typing keep their existing lightweight prefix lookup; conjugation runs when you submit the search. Everything runs offline, without new downloads or database reindexing.
+
+Grammar references used while implementing the rules: Tae Kim's [polite forms](https://guidetojapanese.org/learn/grammar/polite) and [causative / passive forms](https://guidetojapanese.org/learn/grammar/causepass). The implementation uses its own rules and adds no third-party code or dependencies.
+
 ## Example sentences
 
 Each word entry has an **Example sentences** section below its primary definitions. It shows examples embedded in the current entry, Tatoeba sentences containing the spelling, and examples from matching Wiktionary entries. Each dictionary example retains its source meaning; related entries can use a different sense. Examples can be short phrases as well as full sentences. **Show more examples** expands the groups, and kanji / hanzi inside examples remain clickable for character analysis.

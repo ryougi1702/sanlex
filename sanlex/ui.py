@@ -702,6 +702,9 @@ class MainWindow(QMainWindow):
             'char_scroll': self.char_view.verticalScrollBar().value(),
             'query': self.search_input.text(), 'language': self.language.currentIndex(), 'mode': self.mode,
             'result_query': self._result_query,
+            'conjugations': {self.results.item(i).data(Qt.ItemDataRole.UserRole)[1]:
+                             self.results.item(i).data(Qt.ItemDataRole.UserRole + 1)
+                             for i in range(self.results.count())},
             'analysis': self.analysis_window.snapshot() if self.analysis_window and self.analysis_window.root_char else None,
             'tool_space_active': self._tool_space_active, 'tool_filters_restore': self._tool_filters_restore,
             'sources': self.filter_panel.selected_sources(), 'directions': self.filter_panel.selected_directions(),
@@ -821,6 +824,7 @@ class MainWindow(QMainWindow):
                 item = QListWidgetItem(text)
                 item.setFont(font)
                 item.setData(Qt.ItemDataRole.UserRole, data)
+                item.setData(Qt.ItemDataRole.UserRole + 1, page.get('conjugations', {}).get(data[1]))
                 item.setToolTip(tooltip)
                 self.results.addItem(item)
             self.results.setCurrentRow(page['result_row'])
@@ -999,7 +1003,12 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(text)
             item.setFont(entry_font(entry['lang'], self.results.font()))
             item.setData(Qt.ItemDataRole.UserRole, ("entry", entry["id"]))
-            item.setToolTip(f"{entry['source']} · " + "; ".join(entry["glosses"]))
+            match = entry.get('_conjugation')
+            item.setData(Qt.ItemDataRole.UserRole + 1, match)
+            tooltip = f"{entry['source']} · " + "; ".join(entry["glosses"])
+            if match:
+                tooltip += '\nPossible conjugation: ' + ' → '.join(match['forms']) + '\n' + ' → '.join(match['reasons'])
+            item.setToolTip(tooltip)
             self.results.addItem(item)
         if entries:
             selected_row=next((i for i,e in enumerate(entries) if e['id']==selected_id),0)
@@ -1039,6 +1048,16 @@ class MainWindow(QMainWindow):
         lang = {"jp": "JAPANESE 日本語", "cn": "CHINESE 中文", "en": "ENGLISH"}[entry['lang']]
         body = f"<p class='tag'>{lang} &nbsp; / &nbsp; {esc(entry['source'].upper())}</p>"
         body += f"<h1>{analysis_text(entry['headword'], '#183e33')}</h1><p class='reading'>{esc(entry['reading'])}</p>"
+        if self.mode == 'dictionary':
+            for i in range(self.results.count()):
+                item = self.results.item(i)
+                match = item.data(Qt.ItemDataRole.UserRole + 1)
+                if (item.data(Qt.ItemDataRole.UserRole) == ('entry', entry_id) and match
+                        and match['query'] == self._result_query):
+                    entry['_conjugation'] = match
+                    body += "<p class='muted'><b>Possible conjugation</b>: " + esc(' → '.join(match['forms']))
+                    body += '<br>' + esc(' → '.join(match['reasons'])) + '</p>'
+                    break
         alternatives = [f for f in entry["forms"] if f not in (entry["headword"], entry["reading"])]
         if alternatives:
             body += "<p class='muted'>Other forms: " + " · ".join(analysis_text(f) for f in alternatives) + "</p>"

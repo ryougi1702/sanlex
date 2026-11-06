@@ -9,6 +9,7 @@ import sys
 from datetime import datetime, timezone
 
 from .text import gloss_key, hiragana, is_han, normalize, reading_aliases
+from .conjugation import deinflect, entry_kinds
 
 
 def resource_path(name: str) -> Path:
@@ -248,8 +249,9 @@ class Dictionary:
         return result
 
     def search(self, query: str, lang: str = "all", limit: int = 80, *, sources=None, directions=None) -> list[dict]:
+        original_query = query.strip()
         query = normalize(query.strip())
-        if not query:
+        if not query or limit <= 0:
             return []
         found: dict[str, dict] = {}
         fetch_limit = limit * 2  # Leave room for source duplicates before applying the display limit.
@@ -270,6 +272,34 @@ class Dictionary:
         append(self.conn.execute("SELECT DISTINCT e.* FROM forms f CROSS JOIN entries e ON e.id=f.entry_id "
                                  f"WHERE f.term IN ({marks})" + lang_sql + " ORDER BY e.common DESC,e.definition_lang='en' DESC,e.lang='jp' DESC LIMIT ?",
                                  [*queries, *args, fetch_limit]))
+        # Exact surface matches keep priority. Deinflected forms are exact,
+        # POS-checked Japanese lookups, ahead of broad gloss/prefix matches.
+        if lang in ('all', 'jp'):
+            candidates = deinflect(query)
+            terms = list(dict.fromkeys(c.term for c in candidates))
+            if terms:
+                marks = ','.join('?' * len(terms))
+                rows = self.conn.execute(
+                    'SELECT e.*,f.term AS matched_term FROM forms f CROSS JOIN entries e ON e.id=f.entry_id '
+                    f"WHERE f.term IN ({marks}) AND e.lang='jp'" + lang_sql +
+                    " ORDER BY e.common DESC,e.definition_lang='en' DESC,e.id", [*terms, *args])
+                matches = {}
+                for row in rows:
+                    entry = self.decode(row)
+                    term = entry.pop('matched_term')
+                    matches.setdefault(term, []).append((entry, entry_kinds(entry)))
+                # No SQL limit before POS validation: unrelated homographs must
+                # not crowd a valid, filtered conjugation out of a small limit.
+                for candidate in candidates:
+                    for entry, kinds in matches.get(candidate.term, ()):
+                        if entry['id'] not in found and candidate.kind in kinds:
+                            entry = dict(entry)
+                            entry['_conjugation'] = {
+                                'query': original_query,
+                                'forms': [original_query, *candidate.forms[1:]],
+                                'reasons': list(reversed(candidate.reasons)),
+                            }
+                            found[entry['id']] = entry
         # FTS query is built from quoted tokens; user punctuation is never SQL/FTS syntax.
         tokens = re.findall(r"[^\W_]+", query, re.UNICODE)
         if tokens:

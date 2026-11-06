@@ -171,6 +171,85 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.search_input.text(),'school')
         self.assertGreater(self.window.results.count(),0)
 
+    def wait_components(self):
+        picker = self.window.component_search
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            self.app.processEvents()
+            if not picker.workers and not picker.timer.isActive() and not picker.pending:
+                return
+            QTest.qWait(10)
+        self.fail('Component search did not finish')
+
+    def test_multi_component_picker_filters_and_restores_after_opening_a_character(self):
+        window = self.window
+        with window.db.conn:
+            for char, structure in [('相', '⿰木目'), ('想', '⿱相心'), ('湘', '⿰氵相')]:
+                window.db.add_decomposition(char, structure, 'test')
+        with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected network lookup')):
+            window.navigate('characters')
+            window.component_toggle.click()
+            self.wait_components()
+            picker = window.component_search
+            self.assertEqual(window.character_stack.currentIndex(), 1)
+            self.assertTrue(picker.catalog)
+            picker.palette.anchorClicked.emit(QUrl('part:木'))
+            picker.input.setText('目 + 木')
+            QTest.keyClick(picker.input, Qt.Key.Key_Return)
+            self.wait_components()
+            self.assertEqual(picker.selected, ['木', '目'])
+            for char in '相想湘':
+                self.assertIn(char, picker.results.toPlainText())
+            picker.nested.setChecked(False)
+            self.wait_components()
+            self.assertIn('相', picker.results.toPlainText())
+            self.assertNotIn('想', picker.results.toPlainText())
+            self.assertNotIn('湘', picker.results.toPlainText())
+            picker.strokes.setCurrentIndex(picker.strokes.findData(4))
+            self.assertIn('木', picker.palette.toPlainText())
+            self.assertNotIn('目', picker.palette.toPlainText())
+            picker.results.anchorClicked.emit(QUrl('character:相'))
+            self.assertEqual(window.current_char, '相')
+            self.assertEqual(window.character_stack.currentIndex(), 0)
+            window.go_back()
+            self.app.processEvents()
+            self.assertEqual(window.character_stack.currentIndex(), 1)
+            self.assertEqual(picker.selected, ['木', '目'])
+            self.assertFalse(picker.nested.isChecked())
+            self.assertEqual(picker.strokes.currentData(), 4)
+            self.assertIn('相', picker.results.toPlainText())
+            window.go_forward()
+            self.assertEqual(window.current_char, '相')
+            self.assertEqual(window.character_stack.currentIndex(), 0)
+
+    def test_component_picker_validation_removal_clear_and_pending_search(self):
+        window = self.window
+        window.component_toggle.click()
+        self.wait_components()
+        picker = window.component_search
+        picker.input.setText('木 + 弟')
+        picker.add_input()
+        self.wait_components()
+        self.assertIn('梯', picker.results.toPlainText())
+        picker.input.setText('wood')
+        picker.add_input()
+        self.assertEqual(picker.selected, ['木', '弟'])
+        self.assertIn('Use kanji', picker.status.text())
+        picker.selection.linkActivated.emit('remove:弟')
+        self.wait_components()
+        self.assertEqual(picker.selected, ['木'])
+        picker.input.setText('木火')
+        picker.add_input()
+        # Start a worker, then clear before its queued result can be delivered.
+        picker.timer.stop()
+        picker.start_search()
+        picker.clear()
+        self.wait_components()
+        self.assertEqual(picker.selected, [])
+        self.assertEqual(picker.results.toPlainText().strip(), '')
+        self.assertIn('Choose one or more', picker.status.text())
+        self.assertFalse(picker.more.isVisible())
+
     def test_conjugation_explanation_survives_navigation_recent_search_and_examples(self):
         window = self.window
         with window.db.conn:

@@ -49,6 +49,16 @@ The entry shows **Possible conjugation**, the steps from your input to the match
 
 Grammar references used while implementing the rules: Tae Kim's [polite forms](https://guidetojapanese.org/learn/grammar/polite) and [causative / passive forms](https://guidetojapanese.org/learn/grammar/causepass). The implementation uses its own rules and adds no third-party code or dependencies.
 
+## Find characters by multiple components
+
+Open **Characters → Components…** in the Character explorer. Click parts in the palette, or enter several components (for example, `木 + 目`) and choose **Add**. Results contain **every** selected component. You can select up to eight different parts; repeated selections do not require repeated occurrences. Click a selected part to remove it, or use **Clear** to start again.
+
+**Include nested parts** is enabled by default: `木 + 目` can find `相`, along with characters built from it such as `想` and `湘`. Turn it off to require direct recorded parts. The palette starts with frequently used components and can be filtered by recorded stroke count. Hover over a part for its recorded parent count and stroke information; KANJIDIC2 / Unihan counts can differ from a particular regional glyph. Water `水` and its component form `氵` remain separate selections.
+
+Click a matching character to open its explorer, then choose **Strokes & readings** for animation and regional details. **Back / Forward** restores the component selections, nested-parts setting, palette filter and results. **More matches** adds 80 characters to broad results. Searches run offline in the background against installed IDS data, independently of word dictionary, direction and language filters. If no component data is installed, install **IDS** through **Dictionaries & sources**. No reindex or additional dependency is needed for an existing full installation.
+
+The finder searches all recorded IDS structures, including regional alternatives and indirect relationships. A match may use a different decomposition or regional shape from your current font; coverage is limited by the source records. It is a visual lookup aid, not an etymology analysis.
+
 ## Example sentences
 
 Each word entry has an **Example sentences** section below its primary definitions. It shows examples embedded in the current entry, Tatoeba sentences containing the spelling, and examples from matching Wiktionary entries. Each dictionary example retains its source meaning; related entries can use a different sense. Examples can be short phrases as well as full sentences. **Show more examples** expands the groups, and kanji / hanzi inside examples remain clickable for character analysis.

@@ -8,7 +8,7 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 
-from .text import gloss_key, hiragana, is_han, normalize, reading_aliases
+from .text import gloss_key, hiragana, is_han, normalize, parse_components, reading_aliases
 from .conjugation import deinflect, entry_kinds
 
 
@@ -402,6 +402,54 @@ class Dictionary:
                                      "LEFT JOIN characters ch ON ch.char=c.parent WHERE c.component=? AND c.parent<>? "
                                      "ORDER BY coalesce(cast(json_extract(ch.kanjidic,'$.frequency') AS INT),999999),c.parent LIMIT ?", (char, char, limit + 1)).fetchall()
         return [dict(r) for r in rows[:limit]], len(rows) > limit
+
+    def component_catalog(self) -> list[dict]:
+        """Selectable Unicode parts in the installed shared IDS index."""
+        rows = self.conn.execute(
+            'SELECT c.component,COUNT(DISTINCT c.parent) uses,ch.unihan,ch.kanjidic '
+            'FROM components c LEFT JOIN characters ch ON ch.char=c.component '
+            'WHERE length(c.component)=1 AND c.parent<>c.component GROUP BY c.component')
+        result = []
+        for row in rows:
+            char = row['component']
+            try:
+                # Keep the spelling actually indexed; NFKC is only an input aid.
+                if parse_components(char) != [char]:
+                    continue
+            except ValueError:
+                continue
+            uni, kan = json.loads(row['unihan'] or '{}'), json.loads(row['kanjidic'] or '{}')
+            strokes = (kan.get('strokes') or [uni.get('kTotalStrokes', '')])[0]
+            match = re.search(r'\d+', str(strokes))
+            result.append({'char': char, 'uses': row['uses'], 'strokes': int(match[0]) if match else None})
+        return sorted(result, key=lambda r: (-r['uses'], r['strokes'] or 999, r['char']))
+
+    def find_by_components(self, components, recursive=True, limit=80) -> tuple[list[dict], bool]:
+        """Intersect proper ancestors of every selected part, before paging.
+
+        UNION deduplicates each (selected part, ancestor) pair, so cycles and
+        duplicate sources terminate. A character does not contain itself.
+        Shared IDS alternatives are searched together, as in the atlas.
+        """
+        selected = parse_components(components)
+        if not selected or limit <= 0:
+            return [], False
+        seeds = ','.join('(?)' for _ in selected)
+        recursion = '''UNION SELECT r.component,c.parent FROM reached r
+            JOIN components c ON c.component=r.parent WHERE c.parent<>r.component''' if recursive else ''
+        rows = self.conn.execute(f'''WITH RECURSIVE wanted(component) AS (VALUES {seeds}),
+            reached(component,parent) AS (
+                SELECT w.component,c.parent FROM wanted w JOIN components c ON c.component=w.component
+                WHERE c.parent<>w.component {recursion}
+            ), matches AS (
+                SELECT parent FROM reached GROUP BY parent HAVING COUNT(DISTINCT component)=?
+            ) SELECT m.parent,ch.unihan,ch.kanjidic FROM matches m
+            LEFT JOIN characters ch ON ch.char=m.parent WHERE length(m.parent)=1
+            ORDER BY coalesce(nullif(cast(json_extract(ch.kanjidic,'$.frequency') AS INT),0),999999),
+                coalesce(cast(json_extract(ch.kanjidic,'$.strokes[0]') AS INT),
+                         cast(json_extract(ch.unihan,'$.kTotalStrokes') AS INT),999),m.parent LIMIT ?''',
+            [*selected, len(selected), limit + 1]).fetchall()
+        return [dict(row) for row in rows[:limit]], len(rows) > limit
 
     def containing(self, char: str, lang: str = "all", limit: int = 40, *, sources=None, directions=None) -> list[dict]:
         suffix, args = ("", []) if lang == "all" else (" AND e.lang=?", [lang])

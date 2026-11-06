@@ -12,6 +12,26 @@ def is_han(char: str) -> bool:
                               0x20000 <= ord(char) <= 0x3347F)
 
 
+def parse_components(value) -> list[str]:
+    """Distinct component codepoints; compatibility radicals use their Han form.
+
+    Visual variants such as 水 and 氵 remain separate. IDS entities with no
+    Unicode glyph cannot be entered or presented as selectable characters.
+    """
+    text = ud.normalize('NFKC', value if isinstance(value, str) else ''.join(value))
+    result = []
+    for char in text:
+        if char.isspace() or char in '+,、;/':
+            continue
+        if not (is_han(char) or 0x2E80 <= ord(char) <= 0x2FDF or 0x31C0 <= ord(char) <= 0x31EF):
+            raise ValueError('Use kanji / hanzi components, separated by spaces or +.')
+        if char not in result:
+            result.append(char)
+        if len(result) > 8:
+            raise ValueError('Select up to 8 different components.')
+    return result
+
+
 def normalize(value: str) -> str:
     value = ud.normalize("NFKC", value).casefold().replace("u:", "v")
     value = re.sub("u\u0308", "v", ud.normalize('NFD', value))

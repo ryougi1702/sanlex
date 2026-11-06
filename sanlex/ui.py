@@ -14,7 +14,7 @@ from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QKeySequence
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
     QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton,
-    QSplitter, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QScrollArea, QDockWidget)
+    QSplitter, QStackedWidget, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QScrollArea, QDockWidget)
 
 from .db import Dictionary, resource_path
 from .filters import FilterPanel
@@ -22,6 +22,7 @@ from .fonts import REGIONAL_FONT_CSS, entry_font, font_style, language_html
 from .analysis_window import AnalysisPopup, AnalysisWindow
 from .examples import corpus_examples, dictionary_examples
 from .autocomplete import Autocomplete
+from .component_search import ComponentSearch
 from .handwriting_window import HandwritingWindow
 from .importers import Cancelled, SOURCES, download, install_source
 from .text import IDS_LABELS, is_han, parse_ids, radical_label
@@ -556,7 +557,10 @@ class MainWindow(QMainWindow):
         self.word_view.anchorClicked.connect(self.handle_link)
         self.tabs.addTab(self.word_view, "Word + translations")
         char_panel = QWidget()
-        char_layout = QVBoxLayout(char_panel)
+        char_outer = QVBoxLayout(char_panel)
+        char_outer.setContentsMargins(0, 0, 0, 0)
+        atlas_panel = QWidget()
+        char_layout = QVBoxLayout(atlas_panel)
         char_layout.setContentsMargins(10, 10, 10, 10)
         char_row = QHBoxLayout()
         self.char_input = QLineEdit("弟")
@@ -572,12 +576,34 @@ class MainWindow(QMainWindow):
         self.recursive.toggled.connect(lambda: self.show_character(self.current_char))
         char_row.addWidget(self.recursive)
         char_layout.addLayout(char_row)
-        char_layout.addWidget(button("Strokes, readings && parts", lambda: self.open_character_analysis(self.current_char)),
-                              alignment=Qt.AlignmentFlag.AlignLeft)
+        char_tools = QHBoxLayout()
+        stroke_details = button('Strokes && readings', lambda: self.open_character_analysis(self.current_char))
+        stroke_details.setToolTip('Stroke animation, readings and parts')
+        char_tools.addWidget(stroke_details)
+        char_tools.addStretch()
+        self.component_toggle = QPushButton('Components…')
+        self.component_toggle.setCheckable(True)
+        self.component_toggle.setAccessibleName('Find characters by multiple components')
+        self.component_toggle.setToolTip('Find characters containing every selected component')
+        self.component_toggle.toggled.connect(self.toggle_component_search)
+        char_tools.addWidget(self.component_toggle)
+        char_layout.addLayout(char_tools)
         self.char_view = QTextBrowser()
         self.char_view.setOpenLinks(False)
         self.char_view.anchorClicked.connect(self.handle_link)
         char_layout.addWidget(self.char_view)
+        self.character_stack = QStackedWidget()
+        self.character_stack.addWidget(atlas_panel)
+        self.component_search = ComponentSearch(self.db.path, self)
+        self.component_search.character_selected.connect(self.show_character)
+        self.component_search.state_changed.connect(self.component_search_changed)
+        self.component_search.details_requested.connect(lambda: self.toggle_component_search(False))
+        component_scroll = QScrollArea()
+        component_scroll.setWidgetResizable(True)
+        component_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        component_scroll.setWidget(self.component_search)
+        self.character_stack.addWidget(component_scroll)
+        char_outer.addWidget(self.character_stack)
         self.tabs.addTab(char_panel, "Character explorer")
         self.analysis_page = QWidget()
         self.analysis_layout = QVBoxLayout(self.analysis_page)
@@ -646,6 +672,9 @@ class MainWindow(QMainWindow):
             panel = self.analysis_window
             return ('analysis',panel.root_char,panel.mode,panel.char,panel.details.currentIndex(),self.filter_panel.signature())
         if self.tabs.currentIndex() == 1:
+            if self.character_stack.currentIndex() == 1:
+                return ('components', tuple(self.component_search.selected), self.component_search.nested.isChecked(),
+                        self.filter_panel.signature())
             return ('character', self.current_char, self.filter_panel.signature())
         if self.current_entry:
             return ('entry', self.current_entry['id'], self.filter_panel.signature())
@@ -697,6 +726,8 @@ class MainWindow(QMainWindow):
         return {
             'key': self.navigation_key(), 'entry_id': self.current_entry['id'] if self.current_entry else None,
             'char': self.current_char, 'tab': self.tabs.currentIndex(),
+            'components_visible': self.character_stack.currentIndex() == 1,
+            'component_search': self.component_search.snapshot(),
             'word_html': self.word_view.toHtml(), 'char_html': self.char_view.toHtml(),
             'word_scroll': self.word_view.verticalScrollBar().value(),
             'char_scroll': self.char_view.verticalScrollBar().value(),
@@ -734,6 +765,8 @@ class MainWindow(QMainWindow):
             page['word_scroll'] = self.word_view.verticalScrollBar().value()
         elif kind == 'character' and self.current_char == value:
             page['char_scroll'] = self.char_view.verticalScrollBar().value()
+        elif kind == 'components' and tuple(self.component_search.selected) == value:
+            page['component_search'] = self.component_search.snapshot()
         elif kind == 'analysis' and self.analysis_window and page.get('analysis'):
             state = self.analysis_window.snapshot()
             previous = page['analysis']
@@ -840,6 +873,9 @@ class MainWindow(QMainWindow):
             self.compound_limit = page['compound_limit']
             self.word_view.setHtml(page['word_html'])
             self.char_view.setHtml(page['char_html'])
+            self.set_component_search_visible(page.get('components_visible', False))
+            if page.get('component_search'):
+                self.component_search.restore(page['component_search'], active=page.get('components_visible', False) and page['tab'] == 1)
             if page.get('analysis'):
                 self.ensure_analysis()
                 self.analysis_window.restore(page['analysis'])
@@ -1139,6 +1175,26 @@ class MainWindow(QMainWindow):
             return
         self.show_character(char)
 
+    def set_component_search_visible(self, visible):
+        blocked = self.component_toggle.blockSignals(True)
+        self.component_toggle.setChecked(visible)
+        self.component_toggle.setText('Details' if visible else 'Components…')
+        self.component_toggle.blockSignals(blocked)
+        self.character_stack.setCurrentIndex(1 if visible else 0)
+        self.recursive.setVisible(not visible)
+
+    def toggle_component_search(self, checked):
+        self.save_navigation_position()
+        self.set_component_search_visible(checked)
+        self.set_detail_tab(1)
+        if checked:
+            self.component_search.activate()
+        self.record_navigation_page()
+
+    def component_search_changed(self):
+        if self.tabs.currentIndex() == 1 and self.character_stack.currentIndex() == 1:
+            self.record_navigation_page()
+
     def component_tree(self, char, ancestors=None, depth=0):
         ancestors = ancestors or set()
         text = link("char", char)
@@ -1166,6 +1222,8 @@ class MainWindow(QMainWindow):
         visible = activate or self.tabs.currentIndex() == 1
         if visible:
             self.save_navigation_position()
+        if activate:
+            self.set_component_search_visible(False)
         if char != self.current_char:
             self.part_limit = 200
             self.compound_limit = 40
@@ -1516,6 +1574,7 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage("Offline library ready · data stays on this device")
         if hasattr(self, "char_view"):
+            self.component_search.reload()
             self.show_character(self.current_char, activate=False)
         if self.analysis_window and self.analysis_window.isVisible():
             self.analysis_window.model.script_conflict.cache_clear()
@@ -1534,6 +1593,7 @@ class MainWindow(QMainWindow):
             worker.requestInterruption()
             worker.wait()
         self.autocomplete.shutdown()
+        self.component_search.shutdown()
         if self.handwriting_window:
             self.handwriting_window.shutdown()
         if self.analysis_window:

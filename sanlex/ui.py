@@ -130,8 +130,20 @@ def label(text, name=None):
     return widget
 
 
+class KeyboardButton(QPushButton):
+    """Activate a focused button with Enter as well as the standard Space key."""
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if not event.isAutoRepeat():
+                self.click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 def button(text, slot, name=None):
-    widget = QPushButton(text)
+    widget = KeyboardButton(text)
     if name:
         widget.setObjectName(name)
     widget.clicked.connect(slot)

@@ -833,6 +833,34 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(window.search_input.text(), 'cat')
         self.assertEqual(window.current_entry['id'], cat_id)
 
+    def test_sidebar_tab_navigation_activates_with_enter_keypad_enter_and_space(self):
+        window = self.window
+        window.activateWindow()
+        self.app.processEvents()
+        activations = []
+        for mode, nav in window.nav.items():
+            nav.clicked.connect(lambda checked=False, key=mode: activations.append(key))
+        for key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            window.show_history()
+            window.nav['dictionary'].setFocus()
+            for mode, nav in window.nav.items():
+                with self.subTest(key=key, mode=mode):
+                    self.assertIs(self.app.focusWidget(), nav)
+                    count = len(activations)
+                    QTest.keyClick(nav, key)
+                    self.wait_search()
+                    self.assertEqual(window.mode, mode)
+                    self.assertTrue(nav.isChecked())
+                    self.assertEqual(activations[count:], [mode])
+                QTest.keyClick(nav, Qt.Key.Key_Tab)
+        count = len(activations)
+        window.search_input.setFocus()
+        window.search_input.setText('water')
+        QTest.keyClick(window.search_input, Qt.Key.Key_Return)
+        self.wait_search()
+        self.assertEqual(window.current_entry['id'], 'fixture:water:jp')
+        self.assertEqual(len(activations), count)
+
     def test_keyboard_shortcuts_and_reopening_selected_search_result(self):
         window = self.window
         origin = window.current_entry['id']

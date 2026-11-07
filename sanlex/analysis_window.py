@@ -212,7 +212,16 @@ class AnalysisWindow(QDialog):
         self.parts_splitter.setSizes([400,400])
         self.parts_splitter.setHandleWidth(7)
         self.parts_splitter.setStyleSheet('QSplitter::handle {background:#d7ded7;}')
-        self.details.addTab(self.parts_splitter,'Parts / Part of')
+        parts_page = self.parts_splitter
+        if embedded:
+            # Build the page before adding tabs: removing a tab hides its
+            # widget, even when it is later moved into another layout.
+            parts_page = QWidget()
+            parts_layout = QVBoxLayout(parts_page)
+            parts_layout.setContentsMargins(0,0,0,0)
+            parts_layout.addWidget(self.nested)
+            parts_layout.addWidget(self.parts_splitter,1)
+        self.details.addTab(parts_page,'Parts / Part of')
         self.details.addTab(self.words,'Words containing this character')
         if embedded:
             stroke_scroll = QScrollArea()
@@ -221,13 +230,6 @@ class AnalysisWindow(QDialog):
             self.details.insertTab(0,stroke_scroll,'Strokes / readings')
             self.details.setTabText(1,'Parts / Part of')
             self.details.setTabText(2,'Words')
-            parts_page = QWidget()
-            parts_layout = QVBoxLayout(parts_page)
-            parts_layout.setContentsMargins(0,0,0,0)
-            parts_layout.addWidget(self.nested)
-            self.details.removeTab(1)
-            parts_layout.addWidget(self.parts_splitter,1)
-            self.details.insertTab(1,parts_page,'Parts / Part of')
             self.details.setCurrentIndex(0)
         else:
             layout.addWidget(stroke_page)

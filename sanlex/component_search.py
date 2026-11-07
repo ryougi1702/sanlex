@@ -3,9 +3,9 @@ from html import escape
 import json
 from urllib.parse import quote, unquote
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit,
-                              QPushButton, QTextBrowser, QVBoxLayout, QWidget)
+from PySide6.QtCore import Qt, QThread, QTimer, Signal, QSize
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit,
+                              QListView, QListWidget, QListWidgetItem, QPushButton, QSizePolicy, QTextBrowser, QVBoxLayout, QWidget)
 
 from .db import Dictionary
 from .fonts import REGIONAL_FONT_CSS, language_html
@@ -50,13 +50,16 @@ class ComponentWorker(QThread):
 
 class ComponentSearch(QWidget):
     character_selected = Signal(str)
+    insert_requested = Signal(str)
+    close_requested = Signal()
     state_changed = Signal()
-    details_requested = Signal()
 
     def __init__(self, path, parent=None):
         super().__init__(parent)
         self.setObjectName('componentSearch')
-        self.setStyleSheet('QWidget#componentSearch {background:#fffef9;}')
+        self.setStyleSheet('QWidget#componentSearch {background:#fffef9;} QPushButton {padding:5px 7px;} '
+                          'QComboBox {padding:5px 7px;min-width:90px;} QLabel {font-size:12px;} '
+                          'QLineEdit {padding:6px;font-size:14px;}')
         self.path = path
         self.selected = []
         self.catalog = None
@@ -70,12 +73,18 @@ class ComponentSearch(QWidget):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.start_search)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
         heading = QHBoxLayout()
-        heading.addWidget(QLabel('Find by components'), 1)
-        details = QPushButton('← Details')
-        details.clicked.connect(self.details_requested)
-        heading.addWidget(details)
+        title = QLabel('Search by components')
+        title.setStyleSheet('font-size:15px;font-weight:600;color:#214b40;')
+        title.setToolTip('Choose parts on the left, then select a match to look up or insert. '
+                         'Matches contain every selected part. IDS structures and stroke counts can vary by region; word filters do not restrict this search.')
+        heading.addWidget(title, 1)
+        self.hide_button = QPushButton('Hide ×')
+        self.hide_button.setAccessibleName('Hide component search panel')
+        self.hide_button.clicked.connect(self.close_requested)
+        heading.addWidget(self.hide_button)
         layout.addLayout(heading)
         row = QHBoxLayout()
         self.input = QLineEdit()
@@ -91,22 +100,22 @@ class ComponentSearch(QWidget):
         clear.clicked.connect(self.clear)
         row.addWidget(clear)
         layout.addLayout(row)
-        self.selection = QLabel('No components selected')
+        self.selection = title
         self.selection.setWordWrap(True)
         self.selection.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse |
                                                Qt.TextInteractionFlag.LinksAccessibleByKeyboard)
         self.selection.setToolTip('Click a selected component to remove it.')
         self.selection.linkActivated.connect(lambda url: self.toggle(unquote(url.split(':', 1)[1])))
-        layout.addWidget(self.selection)
         options = QHBoxLayout()
-        self.nested = QCheckBox('Include nested parts')
+        self.nested = QCheckBox('Nested parts')
+        self.nested.setToolTip('Include parts inside other components, such as 木 inside 相 inside 想.')
         self.nested.setChecked(True)
         self.nested.toggled.connect(self.selection_changed)
         options.addWidget(self.nested)
         options.addStretch()
         self.strokes = QComboBox()
         self.strokes.setAccessibleName('Filter component palette by stroke count')
-        self.strokes.addItem('Any recorded strokes', 'all')
+        self.strokes.addItem('All stroke counts', 'all')
         self.strokes.setToolTip('Recorded KANJIDIC2 / Unihan counts; regional component glyphs can differ.')
         self.strokes.currentIndexChanged.connect(self.palette_changed)
         options.addWidget(self.strokes)
@@ -115,37 +124,84 @@ class ComponentSearch(QWidget):
         self.palette.setAccessibleName('Choose character components')
         self.palette.setOpenLinks(False)
         self.palette.anchorClicked.connect(lambda url: self.toggle(unquote(url.toString().split(':', 1)[1])))
-        self.palette.setMinimumHeight(95)
+        self.palette.setMinimumSize(110, 48)
+        self.palette.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.palette.setStyleSheet('QTextBrowser {padding:4px;}')
-        self.palette_more = QPushButton('More components')
+        self.palette_more = QPushButton('More')
         self.palette_more.setToolTip('Show 120 more components')
         self.palette_more.clicked.connect(self.more_components)
         self.palette_more.hide()
         self.status = QLabel('Choose one or more components to find characters.')
         self.status.setWordWrap(True)
-        self.results = QTextBrowser()
+        self.results = QListWidget()
         self.results.setAccessibleName('Characters matching every selected component')
-        self.results.setOpenLinks(False)
-        self.results.anchorClicked.connect(lambda url: self.character_selected.emit(unquote(url.toString().split(':', 1)[1])))
-        self.results.setStyleSheet('QTextBrowser {padding:4px;}')
-        self.more = QPushButton('More matches')
+        self.results.setViewMode(QListView.ViewMode.IconMode)
+        self.results.setResizeMode(QListView.ResizeMode.Adjust)
+        self.results.setMovement(QListView.Movement.Static)
+        self.results.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.results.setGridSize(QSize(43, 43))
+        self.results.setStyleSheet("QListWidget {background:#fffef9;font-size:27px;font-family:'Yu Gothic UI','Microsoft YaHei';} "
+                                   'QListWidget::item {padding:2px;margin:1px;}')
+        self.results.setMinimumSize(110, 48)
+        self.results.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self.results.currentItemChanged.connect(self.candidate_changed)
+        self.results.itemActivated.connect(lambda *_: self.lookup())
+        self.more = QPushButton('More')
         self.more.setToolTip('Show 80 more characters')
         self.more.clicked.connect(self.more_results)
         self.more.hide()
         browsers = QHBoxLayout()
-        for title, view, more in (('Choose parts', self.palette, self.palette_more),
-                                  ('Matching characters', self.results, self.more)):
+        for title, view, more in (('Parts', self.palette, self.palette_more),
+                                  ('Matches', self.results, self.more)):
             column = QVBoxLayout()
-            column.addWidget(QLabel(title))
+            caption = QHBoxLayout()
+            caption.addWidget(QLabel(title), 1)
+            caption.addWidget(more)
+            column.addLayout(caption)
             column.addWidget(view, 1)
-            column.addWidget(more)
+            if view is self.results:
+                actions = QHBoxLayout()
+                self.lookup_button = QPushButton('Look up')
+                self.lookup_button.setObjectName('primary')
+                self.lookup_button.clicked.connect(self.lookup)
+                self.insert_button = QPushButton('Insert')
+                self.insert_button.setToolTip('Insert at the search cursor, replacing selected text, and clear the selected parts.')
+                self.insert_button.clicked.connect(self.insert)
+                actions.addWidget(self.lookup_button)
+                actions.addWidget(self.insert_button)
+                column.addLayout(actions)
             browsers.addLayout(column, 1)
         layout.addLayout(browsers, 1)
         layout.addWidget(self.status)
-        note = QLabel('Matches contain every selected part. Uses IDS across regions; shapes can vary. Word filters do not restrict this search.')
-        note.setWordWrap(True)
-        note.setStyleSheet('color:#687d7c;font-size:12px;')
-        layout.addWidget(note)
+        self.candidate_changed()
+
+    def candidate_changed(self, *_):
+        enabled = self.results.currentItem() is not None
+        self.lookup_button.setEnabled(enabled)
+        self.insert_button.setEnabled(enabled)
+
+    def lookup(self):
+        item = self.results.currentItem()
+        if item:
+            self.character_selected.emit(item.data(Qt.ItemDataRole.UserRole))
+
+    def insert(self):
+        item = self.results.currentItem()
+        if item:
+            self.insert_requested.emit(item.data(Qt.ItemDataRole.UserRole))
+            self.clear()
+
+    def fill_candidates(self, rows, selected=None):
+        self.results.clear()
+        for row in rows:
+            item = QListWidgetItem(row['char'])
+            item.setData(Qt.ItemDataRole.UserRole, row['char'])
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setToolTip(row['tooltip'])
+            self.results.addItem(item)
+            if row['char'] == selected:
+                self.results.setCurrentItem(item)
+        self.candidate_changed()
 
     def activate(self):
         if self.catalog is None or self.needs_search:
@@ -187,8 +243,8 @@ class ComponentSearch(QWidget):
 
     def render_selection(self):
         self.selection.setText(' &nbsp; + &nbsp; '.join(
-            f'<a href="remove:{quote(c, safe="")}" style="color:#286a55;font-size:20px">{escape(c)} ×</a>'
-            for c in self.selected) or 'No components selected')
+            f'<a href="remove:{quote(c, safe="")}" style="color:#286a55;font-size:16px">{escape(c)} ×</a>'
+            for c in self.selected) or 'Search by components')
 
     def selection_changed(self):
         if self.restoring:
@@ -239,36 +295,36 @@ class ComponentSearch(QWidget):
             self._wanted_strokes = None
             blocked = self.strokes.blockSignals(True)
             self.strokes.clear()
-            self.strokes.addItem('Any recorded strokes', 'all')
+            self.strokes.addItem('All stroke counts', 'all')
             for count in sorted({r['strokes'] for r in self.catalog if r['strokes'] is not None}):
                 self.strokes.addItem(f'{count} strokes', count)
-            self.strokes.addItem('Unknown stroke count', 'unknown')
+            self.strokes.addItem('Unknown strokes', 'unknown')
             self.strokes.setCurrentIndex(max(0, self.strokes.findData(wanted)))
             self.strokes.blockSignals(blocked)
         self.render_palette()
         rows = payload['rows']
-        cells = []
+        candidates = []
         for row in rows:
             uni, kan = json.loads(row['unihan'] or '{}'), json.loads(row['kanjidic'] or '{}')
             title = uni.get('kDefinition') or '; '.join(kan.get('meanings', [])) or 'Open character details'
             reading = ' · '.join([*kan.get('on', []), *kan.get('kun', [])])
-            cells.append(glyph_link('character', row['parent'], title + (' · ' + reading if reading else '')))
-        self.results.setHtml(document(self.grid(cells, 4)))
+            candidates.append({'char': row['parent'], 'tooltip': title + (' · ' + reading if reading else '')})
+        self.fill_candidates(candidates)
         if not self.catalog:
             self.status.setText('No component data installed. Install IDS in Dictionaries & sources.')
         elif not self.selected:
             self.status.setText('Choose one or more components to find characters.')
         elif rows:
-            self.status.setText(f"{len(rows)} characters shown · contains {' + '.join(self.selected)}" +
+            self.status.setText(f"{len(rows)} matches" +
                                 (' · including nested parts' if self.nested.isChecked() else ' · direct parts only'))
         else:
-            self.status.setText('No recorded matches contain every selected part. Remove a part or enable nested parts; regional forms and data coverage can differ.')
+            self.status.setText('No matches. Remove a part or enable nested parts.')
         self.more.setVisible(payload['more'])
         self.state_changed.emit()
 
     @staticmethod
     def grid(cells, columns):
-        rows = ['<tr>' + ''.join(f'<td align="center" width="{100 // columns}%">{c}</td>' for c in cells[i:i+columns]) + '</tr>'
+        rows = ['<tr>' + ''.join(f'<td align="center">{c}</td>' for c in cells[i:i+columns]) + '</tr>'
                 for i in range(0, len(cells), columns)]
         return '<table width="100%">' + ''.join(rows) + '</table>'
 
@@ -283,7 +339,7 @@ class ComponentSearch(QWidget):
             title += f" · {row['strokes']} strokes" if row['strokes'] is not None else ' · stroke count unavailable'
             cell = glyph_link('part', row['char'], title)
             cells.append('<span style="background-color:#dfebe2">' + cell + ' ✓</span>' if row['char'] in self.selected else cell)
-        self.palette.setHtml(document(self.grid(cells, 4) if cells else 'No components with this stroke count.'))
+        self.palette.setHtml(document(self.grid(cells, 3) if cells else 'No components with this stroke count.'))
         self.palette_more.setVisible(len(rows) > self.palette_limit)
 
     def palette_changed(self):
@@ -318,7 +374,10 @@ class ComponentSearch(QWidget):
     def snapshot(self):
         return {'selected': list(self.selected), 'nested': self.nested.isChecked(), 'input': self.input.text(),
                 'limit': self.limit, 'palette_limit': self.palette_limit, 'strokes': self.strokes.currentData(),
-                'html': self.results.toHtml(), 'status': self.status.text(), 'more': not self.more.isHidden(),
+                'candidates': [{'char': self.results.item(i).text(), 'tooltip': self.results.item(i).toolTip()}
+                               for i in range(self.results.count())],
+                'candidate': self.results.currentItem().text() if self.results.currentItem() else None,
+                'status': self.status.text(), 'more': not self.more.isHidden(),
                 'scroll': self.results.verticalScrollBar().value(), 'palette_scroll': self.palette.verticalScrollBar().value(),
                 'pending': self.pending or self.needs_search}
 
@@ -337,7 +396,7 @@ class ComponentSearch(QWidget):
             self._wanted_strokes = state['strokes'] if self.catalog is None else None
             self.render_selection()
             self.render_palette()
-            self.results.setHtml(state['html'])
+            self.fill_candidates(state['candidates'], state['candidate'])
             self.status.setText(state['status'])
             self.more.setVisible(state['more'])
             self.pending = False
@@ -362,3 +421,12 @@ class ComponentSearch(QWidget):
             worker.requestInterruption()
         for worker in self.workers:
             worker.wait()
+
+    def hideEvent(self, event):
+        self.timer.stop()
+        self.generation += 1
+        for worker in self.workers:
+            worker.requestInterruption()
+        self.needs_search = self.needs_search or self.pending
+        self.pending = False
+        super().hideEvent(event)

@@ -181,17 +181,24 @@ class WindowTests(unittest.TestCase):
             QTest.qWait(10)
         self.fail('Component search did not finish')
 
+    def component_matches(self):
+        results = self.window.component_search.results
+        return [results.item(i).text() for i in range(results.count())]
+
     def test_multi_component_picker_filters_and_restores_after_opening_a_character(self):
         window = self.window
         with window.db.conn:
             for char, structure in [('相', '⿰木目'), ('想', '⿱相心'), ('湘', '⿰氵相')]:
                 window.db.add_decomposition(char, structure, 'test')
         with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected network lookup')):
-            window.navigate('characters')
-            window.component_toggle.click()
+            original_entry = window.current_entry['id']
+            window.component_button.click()
             self.wait_components()
             picker = window.component_search
-            self.assertEqual(window.character_stack.currentIndex(), 1)
+            self.assertEqual(window.lookup_tool(), 'components')
+            self.assertEqual(window.tabs.currentIndex(), 0)
+            self.assertEqual(window.current_entry['id'], original_entry)
+            self.assertFalse(window.filter_dock.isVisible())
             self.assertTrue(picker.catalog)
             picker.palette.anchorClicked.emit(QUrl('part:木'))
             picker.input.setText('目 + 木')
@@ -199,38 +206,43 @@ class WindowTests(unittest.TestCase):
             self.wait_components()
             self.assertEqual(picker.selected, ['木', '目'])
             for char in '相想湘':
-                self.assertIn(char, picker.results.toPlainText())
+                self.assertIn(char, self.component_matches())
             picker.nested.setChecked(False)
             self.wait_components()
-            self.assertIn('相', picker.results.toPlainText())
-            self.assertNotIn('想', picker.results.toPlainText())
-            self.assertNotIn('湘', picker.results.toPlainText())
+            self.assertIn('相', self.component_matches())
+            self.assertNotIn('想', self.component_matches())
+            self.assertNotIn('湘', self.component_matches())
             picker.strokes.setCurrentIndex(picker.strokes.findData(4))
             self.assertIn('木', picker.palette.toPlainText())
             self.assertNotIn('目', picker.palette.toPlainText())
-            picker.results.anchorClicked.emit(QUrl('character:相'))
-            self.assertEqual(window.current_char, '相')
-            self.assertEqual(window.character_stack.currentIndex(), 0)
+            picker.results.setCurrentRow(self.component_matches().index('相'))
+            picker.lookup_button.click()
+            self.wait_search()
+            self.assertEqual(window.search_input.text(), '相')
+            self.assertEqual(window.analysis_window.root_char, '相')
+            self.assertEqual(window.tabs.currentIndex(), 2)
+            self.assertEqual(window.lookup_tool(), 'components')
             window.go_back()
             self.app.processEvents()
-            self.assertEqual(window.character_stack.currentIndex(), 1)
+            self.assertEqual(window.lookup_tool(), 'components')
+            self.assertEqual(window.current_entry['id'], original_entry)
             self.assertEqual(picker.selected, ['木', '目'])
             self.assertFalse(picker.nested.isChecked())
             self.assertEqual(picker.strokes.currentData(), 4)
-            self.assertIn('相', picker.results.toPlainText())
+            self.assertIn('相', self.component_matches())
             window.go_forward()
-            self.assertEqual(window.current_char, '相')
-            self.assertEqual(window.character_stack.currentIndex(), 0)
+            self.assertEqual(window.analysis_window.root_char, '相')
+            self.assertEqual(window.tabs.currentIndex(), 2)
 
     def test_component_picker_validation_removal_clear_and_pending_search(self):
         window = self.window
-        window.component_toggle.click()
+        window.component_button.click()
         self.wait_components()
         picker = window.component_search
         picker.input.setText('木 + 弟')
         picker.add_input()
         self.wait_components()
-        self.assertIn('梯', picker.results.toPlainText())
+        self.assertIn('梯', self.component_matches())
         picker.input.setText('wood')
         picker.add_input()
         self.assertEqual(picker.selected, ['木', '弟'])
@@ -246,9 +258,63 @@ class WindowTests(unittest.TestCase):
         picker.clear()
         self.wait_components()
         self.assertEqual(picker.selected, [])
-        self.assertEqual(picker.results.toPlainText().strip(), '')
+        self.assertEqual(picker.results.count(), 0)
         self.assertIn('Choose one or more', picker.status.text())
         self.assertFalse(picker.more.isVisible())
+
+    def test_lookup_methods_share_one_panel_preserve_inputs_and_insert_at_cursor(self):
+        window = self.window
+        original_entry = window.current_entry['id']
+        window.handwriting_button.click()
+        pad = window.handwriting_window
+        pad.canvas.strokes = [[(.1, .2), (.8, .2)]]
+        pad.canvas.changed.emit()
+        window.component_button.click()
+        self.wait_components()
+        picker = window.component_search
+        self.assertFalse(pad.isVisible())
+        self.assertFalse(pad.timer.isActive())
+        self.assertTrue(picker.isVisible())
+        self.assertFalse(window.handwriting_button.isChecked())
+        self.assertTrue(window.component_button.isChecked())
+        self.assertFalse(window.filter_dock.isVisible())
+        self.assertEqual(window.current_entry['id'], original_entry)
+        picker.input.setText('木弟')
+        picker.add_input()
+        self.wait_components()
+        picker.results.setCurrentRow(self.component_matches().index('梯'))
+        self.assertTrue(picker.lookup_button.isEnabled())
+        window.handwriting_button.click()
+        self.assertTrue(pad.isVisible())
+        self.assertFalse(picker.isVisible())
+        self.assertEqual(pad.canvas.strokes, [[(.1, .2), (.8, .2)]])
+        window.component_button.click()
+        self.wait_components()
+        self.assertEqual(picker.selected, ['木', '弟'])
+        self.assertEqual(picker.results.currentItem().text(), '梯')
+        window.search_input.setText('学校')
+        window.search_input.setSelection(1, 1)
+        picker.insert_button.click()
+        self.wait_components()
+        self.assertEqual(window.search_input.text(), '学梯')
+        self.assertEqual(picker.selected, [])
+        self.assertEqual(picker.results.count(), 0)
+        picker.hide_button.click()
+        self.assertIsNone(window.lookup_tool())
+        self.assertFalse(window.component_button.isChecked())
+        self.assertFalse(window.handwriting_button.isChecked())
+        self.assertTrue(window.filter_dock.isVisible())
+        self.assertTrue(window.examples_widget.isVisible())
+
+    def test_switching_lookup_methods_preserves_initially_hidden_filters(self):
+        window = self.window
+        window.filter_dock.hide()
+        window.component_button.click()
+        self.wait_components()
+        window.handwriting_button.click()
+        window.close_handwriting()
+        self.assertFalse(window.filter_dock.isVisible())
+        self.assertIsNone(window.lookup_tool())
 
     def test_conjugation_explanation_survives_navigation_recent_search_and_examples(self):
         window = self.window
@@ -399,6 +465,26 @@ class WindowTests(unittest.TestCase):
         panel.canvas.play()
         window.tabs.setCurrentIndex(0)
         self.assertFalse(panel.canvas.timer.isActive())
+
+    def test_analysis_parts_panes_are_visible_and_links_open_characters(self):
+        window = self.window
+        window.open_character_analysis('梯', 'ja')
+        panel = window.analysis_window
+        panel.details.setCurrentIndex(1)
+        self.app.processEvents()
+        self.assertTrue(panel.parts.isVisible())
+        self.assertTrue(panel.part_of.isVisible())
+        self.assertTrue(all(size > 0 for size in panel.parts_splitter.sizes()))
+        self.assertIn('弟', panel.parts.toPlainText())
+        panel.parts.anchorClicked.emit(QUrl('char:弟'))
+        self.app.processEvents()
+        self.assertEqual(panel.char, '弟')
+        self.assertIn('梯', panel.part_of.toPlainText())
+        panel.details.setCurrentIndex(0)
+        panel.details.setCurrentIndex(1)
+        self.app.processEvents()
+        self.assertTrue(panel.parts.isVisible())
+        self.assertTrue(panel.part_of.isVisible())
 
     def test_analysis_popout_returns_same_panel_and_preserves_state(self):
         window = self.window

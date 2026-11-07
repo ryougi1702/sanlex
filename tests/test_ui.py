@@ -372,6 +372,56 @@ class WindowTests(unittest.TestCase):
         self.assertIn('梯', self.window.char_view.toPlainText())
         self.assertIn('Part of', self.window.char_view.toPlainText())
 
+    def test_definition_word_links_and_character_context_menu(self):
+        from PySide6.QtGui import QTextCursor
+        from urllib.parse import unquote
+        window = self.window
+        with window.db.conn:
+            window.db.add_entry({'id': 'fixture:ado:jp', 'headword': 'あど', 'reading': 'あど',
+                'lang': 'jp', 'source': 'fixture', 'definition_lang': 'jp',
+                'glosses': ['狂言において、𠀀を務める者。']})
+            window.db.add_entry({'id': 'fixture:kyogen:jp', 'headword': '狂言', 'reading': 'きょうげん',
+                'lang': 'jp', 'source': 'fixture', 'glosses': ['kyogen theatre']})
+        window.refresh_library()
+        window.show_entry('fixture:ado:jp')
+        self.app.processEvents()
+        view = window.word_view
+
+        def point_at(text):
+            cursor = view.document().find(text)
+            self.assertFalse(cursor.isNull())
+            cursor.setPosition(cursor.selectionStart())
+            view.setTextCursor(cursor)
+            view.ensureCursorVisible()
+            start = view.cursorRect(cursor)
+            cursor.movePosition(QTextCursor.MoveOperation.NextCharacter)
+            end = view.cursorRect(cursor)
+            return QPoint((start.left() + end.left()) // 2, start.center().y())
+
+        first, second = point_at('狂言'), point_at('言に')
+        self.assertEqual(unquote(view.anchorAt(first)), 'entry:fixture:kyogen:jp')
+        self.assertEqual(view.anchorAt(first), view.anchorAt(second))
+        self.assertEqual(view.character_at(first), '狂')
+        self.assertEqual(view.character_at(second), '言')
+        self.assertEqual(view.character_at(point_at('𠀀')), '𠀀')
+        menu = view.create_context_menu(first)
+        self.assertIn('Analyse 狂', [action.text() for action in menu.actions()])
+        self.assertTrue(any('Copy' in action.text() for action in menu.actions()))
+        menu.deleteLater()
+        QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=second)
+        self.app.processEvents()
+        self.assertEqual(window.current_entry['id'], 'fixture:kyogen:jp')
+        self.assertEqual(window.tabs.currentIndex(), 0)
+        window.go_back()
+        self.app.processEvents()
+        self.assertEqual(window.current_entry['id'], 'fixture:ado:jp')
+        menu = view.create_context_menu(point_at('言に'))
+        next(action for action in menu.actions() if action.text() == 'Analyse 言').trigger()
+        self.app.processEvents()
+        self.assertEqual(window.analysis_window.char, '言')
+        self.assertEqual(window.tabs.currentIndex(), 2)
+        menu.deleteLater()
+
     def test_handwriting_recognition_lookup_insertion_modes_and_lifecycle(self):
         from sanlex.strokes import StrokeStore
         from sanlex.handwriting import resample

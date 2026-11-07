@@ -203,6 +203,22 @@ class Dictionary:
     def entry(self, entry_id: str) -> dict | None:
         return self.decode(self.conn.execute("SELECT * FROM entries WHERE id=?", (entry_id,)).fetchone())
 
+    def definition_targets(self, terms, lang, *, sources=None, directions=None):
+        """Resolve exact written spellings, using the indexed forms table."""
+        if not terms:
+            return {}
+        suffix, args = self.entry_filters(sources, directions)
+        marks = ','.join('?' * len(terms))
+        rows = self.conn.execute(
+            'SELECT f.term,e.id FROM forms f CROSS JOIN entries e ON e.id=f.entry_id '
+            f"WHERE f.term IN ({marks}) AND f.kind='word' AND e.lang=?" + suffix +
+            ' ORDER BY (e.definition_lang=?) DESC,e.common DESC,'
+            "(e.definition_lang='en') DESC,e.id", [*terms, lang, *args, lang])
+        result = {}
+        for row in rows:
+            result.setdefault(row['term'], row['id'])
+        return result
+
     def autocomplete(self, query: str, lang='all', limit=10, *, sources=None, directions=None):
         """Small indexed prefix preview; never reads senses, examples or characters."""
         query=normalize(query.strip())

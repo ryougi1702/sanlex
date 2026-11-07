@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
     QSplitter, QStackedWidget, QTabWidget, QTextBrowser, QVBoxLayout, QWidget, QScrollArea, QDockWidget)
 
 from .db import Dictionary, resource_path
+from .definition_links import DefinitionLinker
+from .entry_browser import EntryBrowser
 from .filters import FilterPanel
 from .fonts import REGIONAL_FONT_CSS, entry_font, font_style, language_html
 from .analysis_window import AnalysisPopup, AnalysisWindow
@@ -589,9 +591,10 @@ class MainWindow(QMainWindow):
         left.addWidget(results_panel)
         splitter.addWidget(left)
         self.tabs = QTabWidget()
-        self.word_view = QTextBrowser()
+        self.word_view = EntryBrowser()
         self.word_view.setOpenLinks(False)
         self.word_view.anchorClicked.connect(self.handle_link)
+        self.word_view.analysis_requested.connect(self.open_character_analysis)
         self.tabs.addTab(self.word_view, "Word + translations")
         char_panel = QWidget()
         char_layout = QVBoxLayout(char_panel)
@@ -1093,6 +1096,7 @@ class MainWindow(QMainWindow):
         if not self.current_entry or self.current_entry['id']!=entry_id:
             self.example_limit=4
         self.current_entry = entry
+        definitions = DefinitionLinker(self.db, **self.filter_kwargs())
         self.save_button.setEnabled(True)
         self.update_save_label()
         lang = {"jp": "JAPANESE 日本語", "cn": "CHINESE 中文", "en": "ENGLISH"}[entry['lang']]
@@ -1117,12 +1121,12 @@ class MainWindow(QMainWindow):
             tags = [*sense.get("pos", []), *sense.get("tags", [])]
             if tags:
                 body += "<p class='tag'>" + esc(" · ".join(tags)) + "</p>"
-            body += f"<p><b>{number:02d}</b> &nbsp; " + language_html(analysis_text("; ".join(sense["glosses"])), entry.get('definition_lang', 'en')) + "</p>"
+            body += f"<p><b>{number:02d}</b> &nbsp; " + language_html(definitions.render("; ".join(sense["glosses"]), entry.get('definition_lang', 'en')), entry.get('definition_lang', 'en')) + "</p>"
             for field, title in (("spellings", "Applies to"), ("readings", "Reading"), ("xref", "See also")):
                 if sense.get(field):
-                    body += f"<p class='muted'>{title}: {analysis_text(' · '.join(sense[field]))}</p>"
+                    body += f"<p class='muted'>{title}: {definitions.render(' · '.join(sense[field]), entry['lang'])}</p>"
             if sense.get("note"):
-                body += f"<p class='muted'>{analysis_text(sense['note'])}</p>"
+                body += f"<p class='muted'>{definitions.render(sense['note'], entry.get('definition_lang', 'en'))}</p>"
         restrictions = (entry["senses"] or [{}])[0].get("reading_restrictions", [])
         restricted = [r for r in restrictions if r["spellings"] or r["no_kanji"]]
         if restricted:
@@ -1140,7 +1144,7 @@ class MainWindow(QMainWindow):
             for localized in localized_entries:
                 glosses = [g for g in localized['glosses'] if g not in seen_glosses]
                 seen_glosses.update(glosses)
-                body += ''.join('<li>' + language_html(analysis_text(g[:240] + ('…' if len(g) > 240 else '')), native_lang) + '</li>' for g in glosses[:3])
+                body += ''.join('<li>' + language_html(definitions.render(g[:240] + ('…' if len(g) > 240 else ''), native_lang), native_lang) + '</li>' for g in glosses[:3])
             body += '</ul><p>' + ' · '.join(link('entry', e['id'], f"Full source entry {i+1}") for i,e in enumerate(localized_entries)) + '</p>'
         body += "<hr><h2>Across languages · JP / EN / CN</h2>"
         mappings = self.db.mappings(entry, **self.filter_kwargs())
@@ -1157,7 +1161,7 @@ class MainWindow(QMainWindow):
                     (link("entry", candidate["id"], shown_word) if candidate['id'] else link('lookup', shown_word))
                     + f" &nbsp; {esc(candidate['reading'])}", candidate['lang'])
                 body += f" · {candidate['lang'].upper()}<br><span class='muted'>{esc(reason)}</span>"
-                body += '<br>' + language_html(analysis_text('; '.join(candidate['glosses'][:3])), candidate.get('definition_lang', 'en')) + '</td></tr>'
+                body += '<br>' + language_html(definitions.render('; '.join(candidate['glosses'][:3]), candidate.get('definition_lang', 'en')), candidate.get('definition_lang', 'en')) + '</td></tr>'
                 if candidate.get('_source_url'):
                     body += f"<tr><td><a href='{esc(candidate['_source_url'], quote=True)}'>Wiktionary source &amp; edit history ↗</a></td></tr>"
             body += "</table><p class='muted'>Wiktionary translations retain their source sense labels and may apply to a different sense of this headword. Suggestions use matching English glosses; check register and usage.</p>"

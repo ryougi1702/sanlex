@@ -69,8 +69,11 @@ QListWidget::item:selected { background: #dfebe2; color: #163e32; border-left: 3
 QListWidget::item:hover { background: #edf2e9; }
 QTextBrowser { border: none; background: #fffef9; padding: 18px; border-radius: 8px; selection-background-color: #d0e5dc; color: #202c32; }
 QTabWidget::pane { border: 1px solid #d9e0d6; background: #fffef9; border-radius: 8px; }
-QTabBar::tab { background: transparent; padding: 13px 18px; color: #6c7c77; border-bottom: 3px solid transparent; }
-QTabBar::tab:selected { color: #205f4b; font-weight: 600; border-bottom: 3px solid #2b7158; }
+QTabBar::tab { background: #ecf4ee; padding: 13px 18px; color: #254d40; font-weight: 600;
+    border: 1px solid #a9c5b4; border-bottom: 3px solid #a9c5b4; border-radius: 6px; margin: 0 3px 4px 0; }
+QTabBar::tab:hover { background: #d5e9dc; color: #173f31; border-color: #6b9b84; border-bottom-color: #39775f; }
+QTabBar::tab:selected { background: #296b58; color: #fff; border-color: #296b58; border-bottom-color: #194b3b; }
+QTabBar::tab:selected:hover { background: #1e5747; border-color: #1e5747; border-bottom-color: #123e30; }
 QSplitter::handle { background: #f4f3ed; width: 14px; }
 QStatusBar { color: #61746e; background: #e9ece4; font-size: 12px; }
 QProgressBar { border: 1px solid #c7d3cd; border-radius: 4px; background: #fff; height: 9px; }

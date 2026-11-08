@@ -7,7 +7,15 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QDialog, QHBoxLayou
     QLabel, QListView, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
 
 from .handwriting import HandwritingRecognizer
+from .kanjicanvas_worker import KanjiCanvasProcess
 from .strokes import MODES
+
+ENGINES = {'custom': 'SanLex custom', 'kanjicanvas': 'KanjiCanvas'}
+
+
+def handwriting_engine(db):
+    value = db.preference('handwriting-engine', 'custom')
+    return value if value in ENGINES else 'custom'
 
 
 class HandwritingCanvas(QWidget):
@@ -139,46 +147,96 @@ class HandwritingCanvas(QWidget):
 
 
 class RecognitionWorker(QThread):
-    ready = Signal(object)
+    ready = Signal(str, object)
     result = Signal(int, object)
-    failed = Signal(str)
+    failed = Signal(str, str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, backend='custom'):
         super().__init__(parent)
         self.condition = threading.Condition()
         self.pending = None
         self.generation = 0
+        self.backend = backend
+
+    def configure(self, backend):
+        with self.condition:
+            self.backend = backend
+            self.pending = None
+            self.condition.notify()
 
     def invalidate(self, generation):
         with self.condition:
             self.generation = generation
             self.pending = None
 
-    def submit(self, generation, strokes, mode):
+    def submit(self, generation, strokes, mode, backend='custom'):
         with self.condition:
             self.generation = generation
-            self.pending = (generation, strokes, mode)
+            self.backend = backend
+            self.pending = (generation, strokes, mode, backend)
             self.condition.notify()
 
     def run(self):
+        kanjicanvas = None
         try:
             recognizer = HandwritingRecognizer(cancelled=self.isInterruptionRequested)
             if self.isInterruptionRequested():
                 return
-            self.ready.emit(recognizer.counts)
+            announced = None
             while not self.isInterruptionRequested():
                 with self.condition:
-                    self.condition.wait_for(lambda: self.pending is not None or self.isInterruptionRequested())
+                    self.condition.wait_for(lambda: self.pending is not None or self.backend != announced
+                                            or self.isInterruptionRequested())
                     if self.isInterruptionRequested():
                         return
-                    generation, strokes, mode = self.pending
+                    backend, job = self.backend, self.pending
                     self.pending = None
-                rows = recognizer.recognize(strokes, mode, cancelled=lambda:
-                    self.isInterruptionRequested() or generation != self.generation)
-                if generation == self.generation and not self.isInterruptionRequested():
-                    self.result.emit(generation, rows)
+                try:
+                    if backend == 'kanjicanvas' and kanjicanvas is None:
+                        kanjicanvas = KanjiCanvasProcess(cancelled=lambda:
+                            self.isInterruptionRequested() or backend != self.backend)
+                    if backend != announced:
+                        counts = dict(recognizer.counts)
+                        if backend == 'kanjicanvas':
+                            chinese = {t.char for t in recognizer.templates if t.mode != 'ja'}
+                            counts.update(ja=len(kanjicanvas.chars), all=len(chinese | kanjicanvas.chars))
+                        self.ready.emit(backend, counts)
+                    announced = backend
+                    if job is None:
+                        continue
+                    generation, strokes, mode, job_backend = job
+                    cancelled = lambda: (self.isInterruptionRequested() or generation != self.generation
+                                         or job_backend != self.backend)
+                    with self.condition:
+                        if cancelled():
+                            continue
+                    if backend == 'custom' or mode in ('hans', 'hant'):
+                        rows = recognizer.recognize(strokes, mode, cancelled=cancelled)
+                    elif mode == 'ja':
+                        rows = kanjicanvas.recognize(strokes, cancelled=cancelled)
+                    else:
+                        japanese = kanjicanvas.recognize(strokes, cancelled=cancelled)
+                        chinese = recognizer.recognize(strokes, 'all', cancelled=cancelled, exclude_modes=('ja',))
+                        # These engines use different scoring scales. Interleave
+                        # their rankings instead of comparing raw distances.
+                        rows, seen = [], set()
+                        for i in range(max(len(japanese), len(chinese))):
+                            for candidates in (japanese, chinese):
+                                if i < len(candidates) and candidates[i]['char'] not in seen:
+                                    seen.add(candidates[i]['char'])
+                                    rows.append(candidates[i])
+                        rows = rows[:24]
+                    if not cancelled():
+                        self.result.emit(generation, rows)
+                except Exception as error:
+                    announced = backend
+                    if not self.isInterruptionRequested() and backend == self.backend:
+                        self.failed.emit(backend, str(error))
         except Exception as error:
-            self.failed.emit(str(error))
+            self.failed.emit(self.backend, str(error))
+        finally:
+            if kanjicanvas is not None:
+                kanjicanvas.close()
 
     def shutdown(self):
         self.requestInterruption()
@@ -202,6 +260,7 @@ class HandwritingWindow(QDialog):
         self.resize(760, 600)
         self.setMinimumSize(310, 280) if embedded else self.setMinimumSize(660, 530)
         self.db = db
+        self.backend = handwriting_engine(db)
         self.generation = 0
         self.counts = None
         self.error = None
@@ -295,7 +354,7 @@ class HandwritingWindow(QDialog):
         self.timer.setSingleShot(True)
         self.timer.setInterval(320)
         self.timer.timeout.connect(self.recognize)
-        self.worker = RecognitionWorker(self)
+        self.worker = RecognitionWorker(self, backend=self.backend)
         self.worker.ready.connect(self.loaded)
         self.worker.result.connect(self.receive)
         self.worker.failed.connect(self.failed)
@@ -310,7 +369,18 @@ class HandwritingWindow(QDialog):
         self.update_coverage()
         self.changed()
 
-    def loaded(self, counts):
+    def set_backend(self, backend):
+        if backend not in ENGINES or backend == self.backend:
+            return
+        self.backend = backend
+        self.error, self.counts = None, None
+        self.coverage.setText(f'Loading {ENGINES[backend]}…')
+        self.changed()
+        self.worker.configure(backend)
+
+    def loaded(self, backend, counts):
+        if backend != self.backend:
+            return
         self.counts = counts
         self.update_coverage()
         self.changed()
@@ -320,7 +390,12 @@ class HandwritingWindow(QDialog):
             return
         mode = self.mode.currentData()
         detail = 'Traditional Chinese has a smaller template set. Try All scripts if a match is missing.' if mode == 'hant' else 'Coverage is limited to the bundled stroke pack.'
-        self.coverage.setText(f'{self.counts[mode]:,} characters · Offline' + (' · Smaller set' if mode=='hant' else '')
+        engine = ENGINES[self.backend] if mode in ('all', 'ja') else ENGINES['custom']
+        if self.backend == 'kanjicanvas':
+            detail = 'KanjiCanvas covers 2,213 Japanese kanji. Chinese candidates use SanLex custom.'
+            if mode == 'all':
+                engine = 'KanjiCanvas + SanLex'
+        self.coverage.setText(f'{engine} · {self.counts[mode]:,} characters · Offline' + (' · Smaller set' if mode=='hant' else '')
                               if self.embedded else f'{self.counts[mode]:,} characters · Offline shape matching. {detail}')
         self.coverage.setToolTip(detail)
 
@@ -347,7 +422,7 @@ class HandwritingWindow(QDialog):
 
     def recognize(self):
         if self.isVisible() and self.canvas.strokes and self.canvas.current is None and not self.error:
-            self.worker.submit(self.generation, [list(s) for s in self.canvas.strokes], self.mode.currentData())
+            self.worker.submit(self.generation, [list(s) for s in self.canvas.strokes], self.mode.currentData(), self.backend)
 
     def receive(self, generation, rows):
         if generation != self.generation or not self.isVisible():
@@ -357,7 +432,7 @@ class HandwritingWindow(QDialog):
             item = QListWidgetItem(row['char'])
             item.setData(Qt.ItemDataRole.UserRole, row)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item.setToolTip(f"{row['char']} · {MODES[row['mode']][0]} template · possible match")
+            item.setToolTip(f"{row['char']} · {row.get('engine', 'SanLex custom')} · {MODES[row['mode']][0]} template · possible match")
             self.candidates.addItem(item)
         self.status.setText(f'{len(self.canvas.strokes)} strokes · Select a possible match.' if rows else
                             'No matches. Try All scripts or clear and redraw the character.')
@@ -379,7 +454,9 @@ class HandwritingWindow(QDialog):
             self.insert_requested.emit(item.data(Qt.ItemDataRole.UserRole)['char'])
             self.canvas.clear()
 
-    def failed(self, message):
+    def failed(self, backend, message):
+        if backend != self.backend:
+            return
         self.error = 'Handwriting unavailable: ' + message
         self.coverage.setText(self.error)
         self.changed()

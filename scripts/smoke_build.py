@@ -4,6 +4,7 @@ Run after packaging, rather than relying on source-mode tests to catch missing
 or incompatible DLLs. No user dictionary, preferences or bookmarks are changed.
 """
 import os
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -38,7 +39,16 @@ def smoke_build(executable):
                                     env=env, startupinfo=startup, timeout=30)
             if result.returncode or not capture.exists() or capture.stat().st_size < 100:
                 raise RuntimeError(f'Packaged application failed to launch {name} (exit {result.returncode})')
-        print('Packaged application launch passed: main window and embedded character / handwriting tools rendered.', flush=True)
+        db = Dictionary(home / 'dictionary.sqlite3')
+        db.set_preference('handwriting-engine', 'kanjicanvas')
+        db.close()
+        report = home / 'kanjicanvas.json'
+        result = subprocess.run([str(executable), '--home', str(home), '--handwriting-check', str(report)],
+                                env=env, startupinfo=startup, timeout=25)
+        data = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+        if result.returncode or not data.get('success') or data.get('engine') != 'kanjicanvas':
+            raise RuntimeError(f'Packaged KanjiCanvas recognition failed: {data}')
+        print('Packaged application passed: main window, embedded tools, and offline KanjiCanvas recognition.', flush=True)
 
 
 if __name__ == '__main__':

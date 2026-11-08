@@ -1,0 +1,4 @@
+# Preserve pinned upstream bytes and their recorded source hashes.
+assets/kanjicanvas/kanji-canvas.js -text
+assets/kanjicanvas/LICENSE.TXT -text
+assets/kanjicanvas/UPSTREAM-README.md -text

@@ -474,6 +474,91 @@ class WindowTests(unittest.TestCase):
         self.window.close()
         self.assertFalse(pad.worker.isRunning())
 
+    def test_settings_switches_handwriting_engines_without_losing_the_drawing(self):
+        window = self.window
+        window.settings_button.click()
+        dialog = window.settings_dialog
+        combo = dialog.handwriting_engine
+        self.assertEqual(combo.currentData(), 'custom')
+        combo.setCurrentIndex(combo.findData('kanjicanvas'))
+        self.assertEqual(window.db.preference('handwriting-engine'), 'kanjicanvas')
+        dialog.close()
+        window.open_handwriting()
+        pad = window.handwriting_window
+        pad.mode.setCurrentIndex(pad.mode.findData('ja'))
+        drawing = [[(.1,.35),(.9,.35)],[(.5,.05),(.5,.95)],
+                   [(.48,.38),(.35,.65),(.08,.9)],[(.52,.38),(.7,.7),(.95,.9)]]
+        pad.canvas.strokes = drawing
+        pad.canvas.changed.emit()
+
+        def wait_for_matches(engine):
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                self.app.processEvents()
+                if pad.error:
+                    self.fail(pad.error)
+                if pad.counts is not None and pad.candidates.count():
+                    self.assertIn(engine, pad.coverage.text())
+                    return [pad.candidates.item(i).text() for i in range(pad.candidates.count())]
+                QTest.qWait(10)
+            self.fail('Handwriting recognition did not finish')
+
+        self.assertIn('木', wait_for_matches('KanjiCanvas')[:5])
+        self.assertEqual(pad.backend, 'kanjicanvas')
+        self.assertEqual(pad.counts['ja'], 2213)
+        self.assertTrue(all(pad.candidates.item(i).data(Qt.ItemDataRole.UserRole)['engine'] == 'KanjiCanvas'
+                            for i in range(pad.candidates.count())))
+        window.open_settings()
+        combo.setCurrentIndex(combo.findData('custom'))
+        dialog.close()
+        self.assertEqual(pad.canvas.strokes, drawing)
+        self.assertEqual(pad.candidates.count(), 0)
+        self.assertIn('木', wait_for_matches('SanLex custom')[:5])
+        self.assertEqual(pad.counts['ja'], 7336)
+        window.open_settings()
+        combo.setCurrentIndex(combo.findData('kanjicanvas'))
+        dialog.close()
+        pad.mode.setCurrentIndex(pad.mode.findData('all'))
+        matches = wait_for_matches('KanjiCanvas + SanLex')
+        self.assertEqual(len(matches), len(set(matches)))
+        pad.mode.setCurrentIndex(pad.mode.findData('hans'))
+        self.assertIn('木', wait_for_matches('SanLex custom')[:5])
+        self.assertTrue(all(pad.candidates.item(i).data(Qt.ItemDataRole.UserRole)['mode'] == 'hans'
+                            for i in range(pad.candidates.count())))
+        window.close()
+        self.app.processEvents()
+        reopened = MainWindow(window.db.path)
+        try:
+            reopened.open_settings()
+            self.assertEqual(reopened.settings_dialog.handwriting_engine.currentData(), 'kanjicanvas')
+        finally:
+            reopened.close()
+            self.app.processEvents()
+
+    def test_failed_optional_handwriting_engine_can_be_switched_back_to_custom(self):
+        window = self.window
+        window.open_handwriting()
+        pad = window.handwriting_window
+        window.open_settings()
+        combo = window.settings_dialog.handwriting_engine
+        with patch('sanlex.handwriting_window.KanjiCanvasProcess', side_effect=FileNotFoundError('Missing test pack')):
+            combo.setCurrentIndex(combo.findData('kanjicanvas'))
+            deadline = time.monotonic() + 5
+            while not pad.error and time.monotonic() < deadline:
+                self.app.processEvents()
+                QTest.qWait(10)
+            self.assertIn('Missing test pack', pad.error or '')
+        combo.setCurrentIndex(combo.findData('custom'))
+        deadline = time.monotonic() + 5
+        while pad.counts is None and time.monotonic() < deadline:
+            self.app.processEvents()
+            QTest.qWait(10)
+        self.assertIsNone(pad.error)
+        self.assertIsNotNone(pad.counts)
+        self.assertIn('SanLex custom', pad.coverage.text())
+        self.assertTrue(pad.worker.isRunning())
+        window.settings_dialog.close()
+
     def test_save_history_and_stale_search(self):
         self.window.save_current()
         self.window.show_saved()

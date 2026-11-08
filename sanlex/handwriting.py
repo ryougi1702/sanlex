@@ -149,7 +149,7 @@ class HandwritingRecognizer:
         if not self.templates and not cancelled():
             raise ValueError('The bundled stroke pack contains no handwriting templates.')
 
-    def recognize(self, strokes, mode='all', limit=24, cancelled=lambda: False):
+    def recognize(self, strokes, mode='all', limit=24, cancelled=lambda: False, *, exclude_modes=()):
         if mode not in self.counts:
             raise ValueError('Unknown handwriting mode')
         strokes = normalize(strokes)
@@ -161,7 +161,7 @@ class HandwritingRecognizer:
         for index, template in enumerate(self.templates):
             if index % 128 == 0 and cancelled():
                 return []
-            if mode != 'all' and template.mode != mode:
+            if (mode != 'all' and template.mode != mode) or template.mode in exclude_modes:
                 continue
             count_penalty = abs(len(strokes) - len(template.strokes)) / max(len(strokes), len(template.strokes))
             score = 1 - sum(a * b for a, b in zip(grid, template.grid)) + .12 * count_penalty

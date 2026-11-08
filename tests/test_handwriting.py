@@ -4,6 +4,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from pathlib import Path
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +14,8 @@ from PySide6.QtWidgets import QApplication
 
 from sanlex.handwriting import HandwritingRecognizer, normalize, resample
 from sanlex.handwriting_window import HandwritingCanvas, RecognitionWorker
+from sanlex.kanjicanvas import KanjiCanvasRecognizer
+from sanlex.kanjicanvas_worker import KanjiCanvasProcess
 from sanlex.strokes import StrokeStore
 
 
@@ -80,6 +83,63 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(normalize([[(50, 30), (70, 30)]]), normalize([[(0, 0), (10, 0)]]))
 
 
+class KanjiCanvasTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+        cls.recognizer = KanjiCanvasRecognizer()
+        cls.store = StrokeStore()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.store.close()
+        cls.recognizer = None
+
+    def test_real_engine_recognizes_independent_drawings_and_reordered_strokes(self):
+        cases = {
+            '木': [[(100, 120), (300, 120)], [(200, 50), (200, 330)],
+                  [(195, 130), (160, 210), (70, 300)], [(205, 130), (250, 225), (340, 300)]],
+            '人': [[(190, 65), (170, 190), (75, 320)], [(185, 110), (240, 240), (320, 320)]],
+            '口': [[(80, 80), (80, 300)], [(80, 80), (300, 80), (300, 300)], [(80, 300), (300, 300)]],
+        }
+        for char, strokes in cases.items():
+            for drawing in (strokes, list(reversed(strokes))):
+                with self.subTest(char=char, reordered=drawing != strokes):
+                    rows = self.recognizer.recognize(drawing)
+                    self.assertIn(char, [r['char'] for r in rows[:5]])
+                    self.assertTrue(all(r['mode'] == 'ja' and r['engine'] == 'KanjiCanvas' for r in rows))
+        self.assertEqual(len(self.recognizer.chars), 2213)
+
+    def test_japanese_characters_from_a_different_stroke_dataset(self):
+        for char in '働辺駅国漢':
+            with self.subTest(char=char):
+                strokes = [[(30 + x * .28 + 2 * math.sin(i * 2.1),
+                             40 + (900 - y) * .32 + 2 * math.cos(i * 1.7))
+                            for i, (x, y) in enumerate(resample(s, 11))]
+                           for s in self.store.record(char, 'ja')['graphics']['medians']]
+                self.assertIn(char, [r['char'] for r in self.recognizer.recognize(strokes)[:5]])
+
+    def test_invalid_input_cancellation_and_missing_engine(self):
+        for strokes in ([], [[]], [[(1, 1)]], [[(1, 1), (1, 1)]]):
+            self.assertEqual(self.recognizer.recognize(strokes), [])
+        self.assertEqual(self.recognizer.recognize([[(0, 0), (1, 1)]], cancelled=lambda: True), [])
+        with self.assertRaises(ValueError):
+            self.recognizer.recognize([], 'hans')
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FileNotFoundError):
+                KanjiCanvasRecognizer(Path(directory))
+
+
+def slow_javascript_worker(connection):
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtQml import QJSEngine
+    app = QCoreApplication([])
+    engine = QJSEngine()
+    connection.send(('ready', None))
+    connection.recv()
+    engine.evaluate('while (true) {}')
+
+
 class CanvasTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -129,4 +189,27 @@ class CanvasTests(unittest.TestCase):
                 self.assertTrue(started.wait(3))
             finally:
                 worker.shutdown()
+            self.assertFalse(worker.isRunning())
+
+    def test_worker_interrupts_javascript_on_shutdown(self):
+        started = threading.Event()
+
+        class SlowJSRecognizer(KanjiCanvasProcess):
+            def __init__(self, *, cancelled):
+                super().__init__(cancelled=cancelled, target=slow_javascript_worker)
+
+            def recognize(self, strokes, cancelled):
+                started.set()
+                return super().recognize(strokes, cancelled=cancelled)
+
+        with patch('sanlex.handwriting_window.KanjiCanvasProcess', SlowJSRecognizer):
+            worker = RecognitionWorker(backend='kanjicanvas')
+            worker.start()
+            try:
+                worker.submit(1, [[(0, 0), (1, 1)]], 'ja', 'kanjicanvas')
+                self.assertTrue(started.wait(5))
+            finally:
+                start = time.monotonic()
+                worker.shutdown()
+            self.assertLess(time.monotonic() - start, 3)
             self.assertFalse(worker.isRunning())

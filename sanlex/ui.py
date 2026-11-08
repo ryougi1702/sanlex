@@ -26,6 +26,7 @@ from .examples import corpus_examples, dictionary_examples
 from .autocomplete import Autocomplete
 from .component_search import ComponentSearch
 from .handwriting_window import HandwritingWindow
+from .settings import SettingsDialog
 from .importers import Cancelled, SOURCES, download, install_source
 from .text import IDS_LABELS, is_han, parse_ids, radical_label
 
@@ -432,6 +433,7 @@ class MainWindow(QMainWindow):
         self._recent_search_generation = None
         self.workers = []
         self.data_dialog = None
+        self.settings_dialog = None
         self.analysis_window = None
         self.analysis_popup = None
         self.handwriting_window = None
@@ -478,6 +480,8 @@ class MainWindow(QMainWindow):
         side.addWidget(self.library_label)
         side.addSpacing(16)
         side.addWidget(button("Dictionaries && sources", self.open_data, "nav"))
+        self.settings_button = button('Settings', self.open_settings, 'nav')
+        side.addWidget(self.settings_button)
         side.addWidget(label("日本語  /  English  /  中文", "subtitle"))
         outer.addWidget(sidebar)
         content = QWidget()
@@ -1579,6 +1583,18 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Saved words exported to {path}")
         except OSError as error:
             QMessageBox.warning(self, "Could not export", str(error))
+
+    def open_settings(self):
+        if self.settings_dialog is None:
+            self.settings_dialog = SettingsDialog(self.db, self)
+            self.settings_dialog.handwriting_engine_changed.connect(self.set_handwriting_engine)
+        self.settings_dialog.show()
+        self.settings_dialog.raise_()
+        self.settings_dialog.activateWindow()
+
+    def set_handwriting_engine(self, backend):
+        if self.handwriting_window is not None:
+            self.handwriting_window.set_backend(backend)
 
     def open_data(self):
         if not self.data_dialog:

@@ -90,7 +90,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(model.variants('務', 'ja'), ['務'])
         self.assertEqual(model.variants('将', 'ja'), ['将'])
         self.assertEqual(model.variants('军', 'ja'), ['軍'])
-        self.assertEqual(model.variants('发', 'ja'), ['發', '髮'])
+        self.assertEqual(model.variants('发', 'ja'), ['発', '髪'])
         self.window.show_character('务', 'hans')
         self.window.modes.setCurrentIndex(2)
         self.assertEqual((self.window.root_char, self.window.char, self.window.mode), ('务', '務', 'ja'))
@@ -118,6 +118,35 @@ class AnalysisTests(unittest.TestCase):
                                          (char, json.dumps(props)))
             self.assertEqual(CharacterAnalysis(self.db, store).variants('务', 'ja'), ['務'])
             store.close()
+
+    def test_character_form_picker_connects_distinct_japanese_and_chinese_forms(self):
+        with self.db.conn:
+            for char, props in [('烧', {'kTraditionalVariant': 'U+71D2'}),
+                                ('燒', {'kSimplifiedVariant': 'U+70E7'}),
+                                ('边', {'kTraditionalVariant': 'U+8FB9 U+908A',
+                                        'kSimplifiedVariant': 'U+8FB9', 'kJapaneseOn': 'HEN'}),
+                                ('邊', {'kSimplifiedVariant': 'U+8FB9'})]:
+                self.db.conn.execute('INSERT INTO characters(char,unihan) VALUES(?,?)',
+                                     (char, json.dumps(props)))
+        for forms in [('烧', '燒', '焼'), ('边', '邊', '辺')]:
+            for root in forms:
+                for mode, expected in zip(('hans', 'hant', 'ja'), forms):
+                    with self.subTest(root=root, mode=mode):
+                        candidates = self.window.model.variants(root, mode)
+                        self.assertIn(expected, candidates)
+                        if mode == 'ja':
+                            self.assertEqual(candidates[0], expected)
+
+        self.window.show_character('焼', 'ja')
+        self.assertTrue(self.window.variants.isEnabled())
+        for char, mode in [('烧', 'hans'), ('燒', 'hant'), ('焼', 'ja')]:
+            index = self.window.variants.findData(char)
+            self.assertGreaterEqual(index, 0)
+            self.window.variants.setCurrentIndex(index)
+            self.assertEqual((self.window.char, self.window.mode), (char, mode))
+            self.assertTrue(self.window.play.isEnabled())
+        self.window.travel(-1)
+        self.assertEqual((self.window.char, self.window.mode), ('燒', 'hant'))
 
     def test_chinese_spellings_and_language_and_source_filters(self):
         model = self.window.model
@@ -184,8 +213,8 @@ class AnalysisTests(unittest.TestCase):
             self.window.handle_link(QUrl('entry:jmdict%3Aschool'))
             self.assertEqual(selected,['jmdict:school'])
             self.window.show_character('发','hant')
-            self.assertEqual(self.window.variants.count(),2)
-            self.window.variants.setCurrentIndex(1)
+            self.assertTrue(self.window.variants.isEnabled())
+            self.window.variants.setCurrentIndex(self.window.variants.findData('髮'))
             self.assertEqual(self.window.char,'髮')
 
     def test_paths_and_partial_strokes(self):

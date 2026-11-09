@@ -284,13 +284,25 @@ class AnalysisWindow(QDialog):
         self.modes.setCurrentIndex(list(MODES).index(mode))
         self.input.setText(char)
         self.variants.clear()
-        for candidate in variants:
-            self.variants.addItem(f'{candidate} · U+{ord(candidate):04X}',candidate)
-        self.variants.setCurrentIndex(variants.index(selected))
-        self.variants.setEnabled(len(variants)>1)
+        choices = dict.fromkeys(variants, mode)
+        for other_mode in MODES:
+            if other_mode != mode:
+                for candidate in self.model.variants(char, other_mode):
+                    choices.setdefault(candidate, other_mode)
+        for candidate, candidate_mode in choices.items():
+            title = f'{candidate} · U+{ord(candidate):04X}'
+            if candidate_mode != mode:
+                title += f' · {self.modes.tabText(list(MODES).index(candidate_mode))}'
+            self.variants.addItem(title, candidate)
+            self.variants.setItemData(self.variants.count()-1, candidate_mode, Qt.ItemDataRole.UserRole + 1)
+        self.variants.setCurrentIndex(self.variants.findData(selected))
+        self.variants.setEnabled(len(choices)>1)
         self.variant_note.setText('Multiple forms are recorded; choose the intended character.' if len(variants)>1 else
                                  (f'From {char}: {MODES[mode][0]} form.' if char != selected else 'Same character codepoint; regional glyphs and stroke order may differ.'))
-        self.variants.setToolTip(self.variant_note.text())
+        tooltip = self.variant_note.text()
+        if len(choices) > 1:
+            tooltip += '\nChoose a related form to switch to its regional view.'
+        self.variants.setToolTip(tooltip)
         self.setWindowTitle(f'{selected} · {MODES[mode][0]} · Character analysis · SanLex')
         self._loading = False
         self.db.set_preference('character-analysis-mode',mode)
@@ -328,7 +340,8 @@ class AnalysisWindow(QDialog):
 
     def variant_changed(self,index):
         if not self._loading and self.root_char and index>=0:
-            self.show_character(self.root_char,self.mode,self.variants.currentData())
+            mode = self.variants.currentData(Qt.ItemDataRole.UserRole + 1)
+            self.show_character(self.root_char, mode, self.variants.currentData())
 
     def travel(self,delta):
         index = self.history_index+delta

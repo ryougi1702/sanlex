@@ -16,6 +16,8 @@ Copyright MDBG and CC-CEDICT contributors, continuing the CEDICT project founded
 
 Copyright © Unicode, Inc. Distributed under the **Unicode License v3** (local copy: `licenses/Unicode-license.txt`). [Unihan documentation](https://www.unicode.org/reports/tr38/), [versioned source archive](https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip). Unicode is a registered trademark of Unicode, Inc. Only selected properties are imported. A radical index is a dictionary classification, distinct from visual components.
 
+SanLex also bundles 298 distinct modern and older Japanese character pairs in `assets/joyo-forms.tsv`. Character analysis combines these single-pair entries with recorded Chinese variants to connect regional forms. [Japanese Agency for Cultural Affairs Jōyō Kanji reading index](https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/joyokanjisakuin/)
+
 ## CJKVI / CHISE IDS
 
 Copyright © 2014–2017 CJKVI Database; based on the CHISE IDS Database. [Original repository and licence notes](https://github.com/cjkvi/cjkvi-ids), [CHISE project](https://www.chise.org/). The `ids.txt` data follows the CHISE licensing terms, **GNU General Public License version 2 or later**. See local `licenses/GPL-2.0.txt` and `licenses/CJKVI-README.md`. The original UTF-8 source can be downloaded using the URL recorded in the `sources` table and retained in the downloads folder. SanLex's decomposition and reverse component tables derived from this file are distributed under the same terms. The importer source code is supplied with this project.

@@ -16,6 +16,18 @@ MODES = {'hans': ('Simplified Chinese', 'CN · Mainland'),
 REGIONS = {'hans': 'G', 'hant': 'T', 'ja': 'J'}
 
 
+@lru_cache(maxsize=1)
+def joyo_forms():
+    path = resource_path('assets/joyo-forms.tsv')
+    pairs = dict(line.split() for line in path.read_text(encoding='utf-8').splitlines()
+                 if line and not line.startswith('#')) if path.is_file() else {}
+    return pairs, {older: modern for modern, older in pairs.items()}
+
+
+def unihan_variants(data, field):
+    return [chr(int(code, 16)) for code in re.findall(r'U\+([0-9A-Fa-f]+)', data.get(field, ''))]
+
+
 class StrokeStore:
     def __init__(self, path=None):
         path = Path(path) if path else resource_path('assets/strokes/characters.sqlite3')
@@ -43,23 +55,45 @@ class CharacterAnalysis:
         self.db, self.strokes = db, strokes
 
     def variants(self, char, mode):
+        older_forms, modern_forms = joyo_forms()
+        data = self.db.character(char)
+        uni = data['unihan']
         if mode == 'ja':
-            # Shared forms such as 学 and 将 are already Japanese. Do not
-            # replace them with traditional Chinese just because a link exists.
-            if self.has_japanese_data(char):
+            if char in modern_forms:
+                modern = modern_forms[char]
+                return [modern, char] if self.has_japanese_data(char) else [modern]
+            # Shared modern forms such as 学 and 将 are already Japanese.
+            if char in older_forms or data['kanjidic'] or self.strokes.record(char, 'ja'):
                 return [char]
-            uni = self.db.character(char)['unihan']
-            candidates = [chr(int(code,16))
-                          for field in ('kTraditionalVariant', 'kSimplifiedVariant')
-                          for code in re.findall(r'U\+([0-9A-Fa-f]+)', uni.get(field, ''))]
-            # Chinese variant links are candidates, not proof of Japanese use.
-            # Keep every attested candidate when the input has multiple meanings.
-            return list(dict.fromkeys(c for c in candidates if self.has_japanese_data(c))) or [char]
+            related = unihan_variants(uni, 'kTraditionalVariant') + unihan_variants(uni, 'kSimplifiedVariant')
+            # A reading alone can be recorded for a Chinese form such as 边.
+            # Prefer an explicit modern Japanese counterpart when one is known.
+            if not any(candidate in modern_forms for candidate in related) and self.has_japanese_data(char):
+                return [char]
+            candidates = []
+            for candidate in related:
+                if candidate == char:
+                    continue
+                if candidate in modern_forms:
+                    candidates.append(modern_forms[candidate])
+                elif self.has_japanese_data(candidate):
+                    candidates.append(candidate)
+            return list(dict.fromkeys(candidates)) or [char]
+
         field = 'kSimplifiedVariant' if mode == 'hans' else 'kTraditionalVariant'
-        value = self.db.character(char)['unihan'].get(field, '')
-        variants = [chr(int(code,16)) for code in re.findall(r'U\+([0-9A-Fa-f]+)',value)]
-        # Keep all candidates: simplified-to-traditional conversion can be ambiguous.
-        return list(dict.fromkeys(variants)) or [char]
+        variants = unihan_variants(uni, field)
+        if variants:
+            return list(dict.fromkeys(variants))
+        older = older_forms.get(char)
+        if older and not self.strokes.record(char, mode):
+            # Use the documented older form as a bridge only when Chinese
+            # variant data or a glyph for this region supports the result.
+            simplified = unihan_variants(self.db.character(older)['unihan'], 'kSimplifiedVariant')
+            if simplified:
+                return list(dict.fromkeys(simplified)) if mode == 'hans' else [older]
+            if self.strokes.record(older, mode):
+                return [older]
+        return [char]
 
     def has_japanese_data(self, char):
         data = self.db.character(char)
